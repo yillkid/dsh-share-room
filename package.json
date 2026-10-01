@@ -1,6 +1,6 @@
 {
   "name": "dsh-share-room",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Invite others into your DeepSeek Harness (DSH) AI conversation: they join from a link, discuss with you and ask the AI together. No account needed.",
   "type": "module",
   "main": "lib/index.js",

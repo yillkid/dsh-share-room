@@ -48,15 +48,19 @@
 
 要求：DSH `0.1.5-rc.1` 或 `0.1.7-rc.2`（都测试过）、Node.js 22 以上，以及一个对方访问得到的 HTTPS 地址（公开域名或 tunnel）。
 
-1. 把这个 repo 放到 DSH web profile 的 `node_modules/dsh-share-room`：
+1. 安装到 DSH 的 web profile：
 
    ```bash
-   cd <你的 DSH web profile>
-   git clone --depth 1 --branch v0.1.0 https://github.com/yillkid/dsh-share-room.git node_modules/dsh-share-room
+   dsh plugin --profile web add dsh-share-room
    ```
 
-2. 在 profile 的 `package.json` 里，把 `"dsh-share-room"` 加进 `dsh.profile.bundles`。
-3. 重启 DSH。对话标题栏会出现「🔗 分享」。
+   DSH 会用 pnpm 从 npm 安装，并自动把它加进 profile 的 `dsh.profile.bundles`。
+
+2. 重启 DSH。对话标题栏会出现「🔗 分享」。
+
+更新用 `dsh plugin --profile web update dsh-share-room`，卸载用 `dsh plugin --profile web remove dsh-share-room`。
+
+不想从 npm 安装的话，也可以直接用 GitHub 的版本：`dsh plugin --profile web add github:yillkid/dsh-share-room#v0.1.1`。
 
 各部分的位置：
 

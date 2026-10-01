@@ -2,6 +2,13 @@
 
 All notable changes are listed here. Versions follow [Semantic Versioning](https://semver.org/); while the version is `0.x`, minor versions may change behavior.
 
+## 0.1.1 — 2026-10-01
+
+First npm release. No code changes since 0.1.0.
+
+- Install with `dsh plugin --profile web add dsh-share-room`.
+- README: the opening now leads with inviting people into your AI conversation.
+
 ## 0.1.0 — 2026-10-01
 
 First release. Tested on DSH `0.1.5-rc.1` and `0.1.7-rc.2`.

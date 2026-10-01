@@ -54,15 +54,19 @@ You need:
 
 Steps:
 
-1. Put this repo in your DSH web profile as `node_modules/dsh-share-room`:
+1. Install it into your DSH web profile:
 
    ```bash
-   cd <your DSH web profile>
-   git clone --depth 1 --branch v0.1.0 https://github.com/yillkid/dsh-share-room.git node_modules/dsh-share-room
+   dsh plugin --profile web add dsh-share-room
    ```
 
-2. In the profile's `package.json`, add `"dsh-share-room"` to `dsh.profile.bundles`.
-3. Restart DSH. **🔗 Share** appears in the conversation header.
+   DSH installs it from npm with pnpm and adds it to the profile's `dsh.profile.bundles` for you.
+
+2. Restart DSH. **🔗 Share** appears in the conversation header.
+
+To update, run `dsh plugin --profile web update dsh-share-room`. To uninstall, run `dsh plugin --profile web remove dsh-share-room`.
+
+To install from GitHub instead of npm: `dsh plugin --profile web add github:yillkid/dsh-share-room#v0.1.1`.
 
 Where things live:
 
