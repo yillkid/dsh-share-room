@@ -106,3 +106,10 @@ test('transcript contains asks, answers and discussion only', () => {
   assert.equal(md.split('SECRET_OUTPUT_123').length - 1, 1, 'only the typed command, never the tool output')
   assert.ok(!md.includes('You are an AI agent'))
 })
+
+test('approval: guest learns only that the owner must approve, nothing about what', () => {
+  const asked = guestItems({ type: 'approval/asked', seq: 7, time: 1, data: { id: 'ap1', toolName: 'bash', callId: 'c1', reason: 'write /etc/shadow', request: { command: 'rm -rf /' } } }, owner)
+  assert.deepEqual(asked, [{ kind: 'approval', seq: 7, at: 1, id: 'ap1', pending: true }])
+  const decided = guestItems({ type: 'approval/decided', seq: 8, time: 2, data: { id: 'ap1', outcome: { kind: 'denied', note: 'secret note' } } }, owner)
+  assert.deepEqual(decided, [{ kind: 'approval', seq: 8, at: 2, id: 'ap1', pending: false }])
+})
