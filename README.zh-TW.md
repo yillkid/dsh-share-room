@@ -2,7 +2,7 @@
 
 中文 | [English](README.md)
 
-> **狀態：規劃中。** 目前還不能用，請看 [PLAN.md](PLAN.md)。
+> **狀態：v0.1 開發中。** 已在 DSH 0.1.7-rc.2 的測試容器完整跑通，尚未發布。請看 [PLAN.md](PLAN.md)。
 
 在 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的對話標題列按一下，就能把**單一**對話分享給別人一起討論。
 
@@ -29,15 +29,23 @@
 
 ## 安裝
 
-尚未發佈。預計的安裝方式：
+還沒上 npm。從原始碼：
 
 ```bash
-# 在你的 DSH web profile 目錄
-npm install dsh-share-room
+# 複製（或從 git npm install）到 DSH web profile 的 node_modules/dsh-share-room
 # 再把 "dsh-share-room" 加進 profile package.json 的 dsh.profile.bundles
 ```
 
-需要 DSH `0.1.5-rc.2` 以上。如果你的 DSH 前面有登入外掛（例如 `dsh-web-auth`），那個外掛必須放行 `/share/`，詳見 [PLAN.md](PLAN.md)。
+已在 DSH `0.1.7-rc.2` 測試。擁有者的 API 在 `/api/share-room.*`，用 DSH 本身的登入；訪客頁面在 `/share/<id>/`，由外掛自己驗證訪客。如果你的 DSH 前面有整站登入閘門（例如 `@summersec/dsh-web-auth`），閘門必須放行 `/share/`、而且只放行它，請看 [docs/web-auth-public-prefixes.md](docs/web-auth-public-prefixes.md)。
+
+如果 DSH 經由反向代理以 HTTPS 提供，代理送出 `X-Forwarded-Proto: https` 時，訪客 cookie 會自動加上 `Secure`。也可以設 `SHARE_ROOM_SECURE_COOKIE=1` 強制開啟。
+
+## 開發
+
+```bash
+node --test test/*.test.js        # 單元與伺服器測試（不需要 DSH）
+node e2e/two-browsers.mjs         # 兩個瀏覽器的端到端測試，需要拋棄式 DSH，見 e2e/README.md
+```
 
 ## 授權
 

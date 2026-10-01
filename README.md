@@ -2,7 +2,7 @@
 
 [中文](README.zh-TW.md) | English
 
-> **Status: planning.** Nothing here runs yet. See [PLAN.md](PLAN.md).
+> **Status: v0.1 in development.** Works end to end on DSH 0.1.7-rc.2 in test containers; not yet published. See [PLAN.md](PLAN.md).
 
 Share **one** [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) conversation with someone else, from a button in the session header.
 
@@ -29,15 +29,23 @@ Share only with people you would let use your AI, and consider running the share
 
 ## Install
 
-Not yet published. The plan is:
+Not yet on npm. From a checkout:
 
 ```bash
-# in your DSH web profile
-npm install dsh-share-room
+# copy (or npm install from git) into your DSH web profile's node_modules/dsh-share-room
 # then add "dsh-share-room" to dsh.profile.bundles in the profile's package.json
 ```
 
-Requires DSH `0.1.5-rc.2` or later. If your DSH sits behind an authentication plugin (for example `dsh-web-auth`), that plugin must let `/share/` through; see [PLAN.md](PLAN.md).
+Tested with DSH `0.1.7-rc.2`. Owner routes live under `/api/share-room.*` and use DSH's own login; guest pages live under `/share/<id>/` and authenticate guests themselves. If your DSH sits behind a login gate for the whole server (for example `@summersec/dsh-web-auth`), that gate must let `/share/` through without opening anything else; see [docs/web-auth-public-prefixes.md](docs/web-auth-public-prefixes.md).
+
+If DSH is reached over HTTPS through a reverse proxy, the guest cookie gets `Secure` automatically when the proxy sends `X-Forwarded-Proto: https`. Set `SHARE_ROOM_SECURE_COOKIE=1` to force it.
+
+## Develop
+
+```bash
+node --test test/*.test.js        # unit + server tests (no DSH needed)
+node e2e/two-browsers.mjs         # two-browser test against a throwaway DSH, see e2e/README.md
+```
 
 ## License
 
