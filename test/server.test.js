@@ -13,9 +13,10 @@ const fixture = JSON.parse(readFileSync(new URL('./fixtures/events.json', import
 const EVENTS = fixture.frames.flatMap((f) => f.type === 'snapshot' ? f.records.map((r) => r.event) : f.type === 'event' ? [f.event] : [])
 const SRC = 'session-aaaaaaaa-2222-3333-4444-555555555555'
 const SID = 'session-11111111-2222-3333-4444-555555555555'
+const SID2 = 'session-22222222-2222-3333-4444-555555555555'
 
 function mockGateway() {
-  const sessions = new Map([[SRC, { title: 'Original', events: EVENTS }], [SID, { title: null, events: EVENTS.map((e) => ({ ...e })) }]])
+  const sessions = new Map([[SRC, { title: 'Original', events: EVENTS }], [SID, { title: null, events: EVENTS.map((e) => ({ ...e })) }], [SID2, { title: null, events: EVENTS.map((e) => ({ ...e })) }]])
   const followers = new Set()
   const calls = []
   const gw = {
@@ -264,4 +265,15 @@ test('invite brute force is rate limited, but only failures count', async (t) =>
   for (let i = 0; i < 25; i++) last = (await h.guest(`${shareId}/invite-info`, { body: { invite: 'A'.repeat(43) } })).status
   assert.equal(last, 429)
   assert.equal((await h.guest(`${shareId}/join`, { body: { invite: secret } })).status, 429)
+})
+
+test('failed invite attempts on one share do not lock out another share', async (t) => {
+  const h = await boot(); t.after(h.close)
+  const a = await h.owner('/api/share-room.create', { sessionId: SID, sourceSessionId: SRC, ownerName: 'C', guestName: 'D' })
+  const [, idA] = a.body.invitePath.match(/^\/share\/([^/]+)\//)
+  for (let i = 0; i < 25; i++) await h.guest(`${idA}/invite-info`, { body: { invite: 'A'.repeat(43) } })
+  assert.equal((await h.guest(`${idA}/invite-info`, { body: { invite: 'A'.repeat(43) } })).status, 429)
+  const b = await h.owner('/api/share-room.create', { sessionId: SID2, sourceSessionId: SRC, ownerName: 'C', guestName: 'E' })
+  const [, idB, secretB] = b.body.invitePath.match(/^\/share\/([^/]+)\/#(.+)$/)
+  assert.equal((await h.guest(`${idB}/join`, { body: { invite: secretB } })).status, 200)
 })
