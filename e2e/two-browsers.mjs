@@ -180,9 +180,15 @@ try {
   // ---- second guest: reissue revokes the old link; removal is immediate -----------
   await manage.click()
   const issue = async (name) => {
+    // A reissue for the same name shows the same label: wait for a NEW link.
+    const before = await owner.locator('[data-share-room=link]').inputValue().catch(() => null)
     await owner.locator('[data-share-room=invite-name]').fill(name)
     await owner.locator('[data-share-room=invite]').click()
-    await owner.waitForFunction((n) => document.querySelector('[data-testid=share-room-manage]')?.textContent.includes(`給「${n}」的連結`), name, { timeout: 10_000 })
+    await owner.waitForFunction(([n, prev]) => {
+      const box = document.querySelector('[data-testid=share-room-manage]')
+      const link = box?.querySelector('[data-share-room=link]')?.value
+      return box?.textContent.includes(`給「${n}」的連結`) && link && link !== prev
+    }, [name, before], { timeout: 10_000 })
     return owner.locator('[data-share-room=link]').inputValue()
   }
   const oldLink = await issue('阿華')

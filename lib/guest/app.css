@@ -32,3 +32,23 @@ footer { border-top: 1px solid var(--line); padding: 8px 14px 12px; }
 .row.end { justify-content: flex-end; }
 .hint { font-size: 12px; color: var(--muted); }
 .mode { border-radius: 14px; white-space: nowrap; flex: none; }
+/* AI answers rendered from Markdown (lib/guest/markdown.js) */
+.msg .body.md { white-space: normal; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md pre, .md blockquote, .md .table { margin: 6px 0; }
+.md p { white-space: pre-wrap; }
+.md h3, .md h4, .md h5, .md h6 { margin: 10px 0 4px; font-size: 15px; }
+.md h3 { font-size: 16px; }
+.md ul, .md ol { padding-left: 1.4em; }
+.md li { white-space: pre-wrap; }
+.md code { font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--line); border-radius: 4px; padding: 0 3px; }
+.md pre { background: var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; }
+.md pre code { background: none; padding: 0; white-space: pre; }
+.md blockquote { border-left: 3px solid var(--line); padding-left: 8px; color: var(--muted); }
+.md hr { border: 0; border-top: 1px solid var(--line); }
+.md .table { overflow-x: auto; }
+.md table { border-collapse: collapse; font-size: 14px; }
+.md th, .md td { border: 1px solid var(--line); padding: 3px 8px; word-break: normal; overflow-wrap: normal; text-align: left; vertical-align: top; }
+.md .align-center { text-align: center; }
+.md .align-right { text-align: right; }
