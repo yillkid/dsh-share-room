@@ -1,0 +1,4 @@
+# dsh-share-room: share one DSH session with guests.
+- insert:
+    - id: share-room
+      name: 'dsh-share-room'
