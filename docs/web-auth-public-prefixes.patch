@@ -1,0 +1,71 @@
+--- /tmp/sr-dev/web-auth-index.orig.js	2026-10-01 15:14:35.928082142 +0800
++++ /tmp/sr-dev/web-auth-index.new.js	2026-10-01 15:28:19.759339818 +0800
+@@ -35,8 +35,39 @@
+   // tickets. Deliberately NOT the password hash: a ticket signer must never be
+   // able to derive or verify the site password. Empty disables the feature.
+   entrySecret: Schema.string().default(''),
++  // Path prefixes served WITHOUT a login, e.g. ['/share'] for dsh-share-room's
++  // guest pages, which authenticate their own visitors. Only a plugin route
++  // registered under one of these prefixes is reachable this way; /, /api,
++  // /auth and the GUI fallback always stay behind the login. Empty (default)
++  // keeps every path gated.
++  publicPrefixes: Schema.array(Schema.string()).default([]),
+ })
+ 
++const RESERVED_PUBLIC = new Set(['/api', '/auth', '/assets', '/plugins', '/static'])
++
++/** Normalize and vet `publicPrefixes`; anything unsafe is refused loudly. */
++export function publicPrefixesOf(list) {
++  const out = []
++  for (const raw of list ?? []) {
++    const prefix = String(raw).replace(/\/+$/, '')
++    if (!/^\/[a-z0-9][a-z0-9_-]*$/i.test(prefix)) throw new Error(`publicPrefixes: "${raw}" must be one path segment like /share`)
++    if (RESERVED_PUBLIC.has(prefix.toLowerCase())) throw new Error(`publicPrefixes: "${raw}" is reserved and must stay behind the login`)
++    out.push(prefix)
++  }
++  return out
++}
++
++/** A request path is public only when it is already canonical (no dot segments, no doubled slashes). */
++function canonicalPath(pathname) {
++  if (pathname.includes('\\')) return false
++  const segs = pathname.split('/')
++  return segs.every((seg, i) => {
++    if (seg === '.' || seg === '..') return false
++    if (seg === '') return i === 0 || i === segs.length - 1
++    return true
++  })
++}
++
+ // Where the persisted session map lives. WEB_AUTH_SESSION_STORE takes an
+ // explicit path, or the literal 'off' to restore the original in-memory-only
+ // behaviour. Otherwise it sits beside the plugin's own state under DSH_HOME.
+@@ -248,6 +279,7 @@
+     this.config = config
+     this.logger = ctx.logger('dsh-web-auth')
+     this.routes = new Map()
++    this.publicPrefixes = publicPrefixesOf(config.publicPrefixes)
+     this.upgrades = new Map()
+     this.indexTaps = [injectAuthBootstrap, rebrandIndex]
+     this.fallback = undefined
+@@ -679,6 +711,20 @@
+       return this.handleAuthRoute(pathname, url, req, res)
+     }
+ 
++    const publicPrefix = canonicalPath(pathname) && url.pathname.split('/').every((seg) => !/%2f|%5c|%2e/i.test(seg))
++      ? this.publicPrefixes.find((p) => pathname === p || pathname.startsWith(`${p}/`))
++      : undefined
++    if (publicPrefix !== undefined) {
++      // Only a registered prefix route inside the public prefix may answer;
++      // never the GUI fallback, never an exact route elsewhere.
++      const route = [...this.routes.values()]
++        .filter((r) => r.kind === 'prefix' && (r.path === publicPrefix || r.path.startsWith(`${publicPrefix}/`)) && (pathname === r.path || pathname.startsWith(`${r.path}/`)))
++        .sort((a, b) => b.path.length - a.path.length)[0]
++      if (route) return route.handler(req, res)
++      res.statusCode = 404
++      return res.end('Not Found')
++    }
++
+     if (!this.currentSession(req)) {
+       const acceptsHtml = req.method === 'GET' && (req.headers.accept ?? '').includes('text/html')
+       if (acceptsHtml) {

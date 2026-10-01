@@ -31,4 +31,4 @@ footer { border-top: 1px solid var(--line); padding: 8px 14px 12px; }
 .row { display: flex; align-items: center; gap: 10px; }
 .row.end { justify-content: flex-end; }
 .hint { font-size: 12px; color: var(--muted); }
-.mode { border-radius: 14px; }
+.mode { border-radius: 14px; white-space: nowrap; flex: none; }

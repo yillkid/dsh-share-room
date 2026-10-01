@@ -254,3 +254,14 @@ test('rejects junk ids and paths', async (t) => {
   const same = await h.owner('/api/share-room.create', { sessionId: SRC, sourceSessionId: SRC, ownerName: 'C', guestName: 'D' })
   assert.equal(same.status, 400)
 })
+
+test('invite brute force is rate limited, but only failures count', async (t) => {
+  const h = await boot(); t.after(h.close)
+  const created = await h.owner('/api/share-room.create', { sessionId: SID, sourceSessionId: SRC, ownerName: 'C', guestName: 'D' })
+  const [, shareId, secret] = created.body.invitePath.match(/^\/share\/([^/]+)\/#(.+)$/)
+  for (let i = 0; i < 30; i++) assert.equal((await h.guest(`${shareId}/invite-info`, { body: { invite: secret } })).status, 200)
+  let last
+  for (let i = 0; i < 25; i++) last = (await h.guest(`${shareId}/invite-info`, { body: { invite: 'A'.repeat(43) } })).status
+  assert.equal(last, 429)
+  assert.equal((await h.guest(`${shareId}/join`, { body: { invite: secret } })).status, 429)
+})
