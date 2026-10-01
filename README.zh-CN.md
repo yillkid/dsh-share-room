@@ -2,7 +2,9 @@
 
 [繁體中文](README.zh-TW.md) | 简体中文 | [English](README.md)
 
-把一段 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 对话分享出去，让大家一起讨论、一起问 AI。对方用浏览器打开链接就能加入，不需要账号。
+邀请朋友加入你和 AI 的对话。大家用手机或电脑打开链接就能一起讨论、一起问 AI，不需要账号。
+
+这是 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的插件。
 
 ![站主在电脑上分享对话，两位访客用手机加入、讨论、问 AI](docs/media/demo.gif)
 

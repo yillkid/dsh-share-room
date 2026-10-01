@@ -2,7 +2,9 @@
 
 [繁體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md) | English
 
-Share one [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) conversation so others can discuss it with you and ask the AI. Guests join from a link in any browser. They don't need an account.
+Invite others into your AI conversation. They open a link on a phone or a desktop, then discuss with you and ask the AI together. No account needed.
+
+A plugin for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness).
 
 ![The owner shares a conversation from a desktop; two guests join on their phones, discuss, and ask the AI](docs/media/demo.gif)
 
