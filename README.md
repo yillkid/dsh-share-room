@@ -2,7 +2,7 @@
 
 [中文](README.zh-TW.md) | English
 
-> **Status: v0.1 in development.** Works end to end on DSH 0.1.7-rc.2 in test containers; not yet published. See [PLAN.md](PLAN.md).
+> **Status: v0.1 in development.** Works end to end on DSH 0.1.5-rc.1 and 0.1.7-rc.2 in test setups; not yet published. See [PLAN.md](PLAN.md).
 
 Share **one** [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) conversation with someone else, from a button in the session header.
 

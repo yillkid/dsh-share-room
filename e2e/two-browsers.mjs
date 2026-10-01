@@ -25,7 +25,7 @@ const watch = (page, who) => {
 }
 try {
   // ---- owner C -------------------------------------------------------------
-  const ownerCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } })
+  const ownerCtx = await browser.newContext({ viewport: { width: 1280, height: 860 }, locale: 'zh-TW' })
   const owner = await ownerCtx.newPage(); watch(owner, 'owner')
   await owner.goto(`${B}/auth/login`)
   await owner.locator('input[type=password]').fill(PASSWORD)
@@ -43,10 +43,18 @@ try {
     return j.result.value
   }, [method, request])
   const source = (await rpc('session/create', {})).sessionId
+  // DSH 0.1.7 has session/projections; on 0.1.5 find the cursor by probing page.
+  const cursorOf = async (id) => {
+    try { return (await rpc('session/projections', { sessionId: id })).asOfSeq } catch {}
+    let lo = -1, hi = 1
+    const ok = async (n) => { try { await rpc('session/page', { address: { kind: 'session', sessionId: id }, throughSeq: n, maxMessages: 1 }); return true } catch { return false } }
+    while (await ok(hi)) { lo = hi; hi *= 2 }
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (await ok(mid)) lo = mid; else hi = mid }
+    return lo
+  }
   const waitTurns = async (n) => {
     for (let i = 0; i < 60; i++) {
-      const p = await rpc('session/projections', { sessionId: source })
-      const page = await rpc('session/page', { address: { kind: 'session', sessionId: source }, throughSeq: p.asOfSeq, maxMessages: 80 })
+      const page = await rpc('session/page', { address: { kind: 'session', sessionId: source }, throughSeq: await cursorOf(source), maxMessages: 80 })
       if (page.records.filter((r) => r.event?.type === 'turn/end').length >= n) return
       await owner.waitForTimeout(500)
     }
@@ -59,7 +67,10 @@ try {
   await waitTurns(2)
   await rpc('session/rename', { sessionId: source, title: tag })
   await owner.reload()
-  const group = owner.getByText('未分組').first()
+  // DSH 0.1.5 shows a one-time beta notice over the GUI.
+  const notice = owner.getByRole('button', { name: /^(继续|繼續|Continue)$/ })
+  if (await notice.first().waitFor({ timeout: 5_000 }).then(() => true, () => false)) await notice.first().click()
+  const group = owner.getByText(/^未分[組组]$/).first()
   await group.waitFor({ timeout: 20_000 })
   if (!(await owner.getByText(tag, { exact: true }).count())) await group.click()
   await owner.getByText(tag, { exact: true }).first().click()
@@ -74,7 +85,11 @@ try {
   await shot(owner, '01-create')
   await owner.locator('[data-share-room=create]').click()
   const linkBox = owner.locator('[data-share-room=link]')
-  await linkBox.waitFor({ timeout: 20_000 })
+  await linkBox.waitFor({ timeout: 20_000 }).catch(async (error) => {
+    await shot(owner, '02-create-failed')
+    const why = await owner.locator('[data-testid=share-room-create] [role=alert]').textContent({ timeout: 2_000 }).catch(() => null)
+    throw new Error(`share was not created${why ? `: ${why}` : ''}`, { cause: error })
+  })
   const link = await linkBox.inputValue()
   assert.match(link, /\/share\/[A-Za-z0-9_-]+\/#[A-Za-z0-9_-]{43}$/)
   await shot(owner, '02-created')
@@ -83,7 +98,7 @@ try {
   await manage.waitFor({ timeout: 20_000 })
   assert.match(await manage.textContent(), /分享中 · 0 位訪客/)
   // The shared session runs read-only; the original keeps its own permission.
-  const permissionOf = async (id) => (await rpc('session/projections', { sessionId: id })).values.permissions?.currentValue
+  const permissionOf = (id) => owner.evaluate(async (id) => (await (await fetch(`/api/share-room.state?sessionId=${encodeURIComponent(id)}`)).json()).permission, id)
   const sharedNow = await owner.evaluate(async (src) => {
     const r = await fetch(`/api/share-room.state?sessionId=${encodeURIComponent(src)}`)
     return (await r.json()).fromHere?.[0]?.sessionId

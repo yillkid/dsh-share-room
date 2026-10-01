@@ -15,6 +15,8 @@ const SRC = 'session-aaaaaaaa-2222-3333-4444-555555555555'
 const SID = 'session-11111111-2222-3333-4444-555555555555'
 const SID2 = 'session-22222222-2222-3333-4444-555555555555'
 
+const projectionsFor = (s) => ({ asOfSeq: s.events.length - 1, values: { title: s.title, permissions: { currentValue: s.permission ?? 'danger-full-access' }, inbox: { 'next-turn': s.inbox ?? [], 'next-step': [] } } })
+
 function mockGateway() {
   const sessions = new Map([[SRC, { title: 'Original', events: EVENTS }], [SID, { title: null, events: EVENTS.map((e) => ({ ...e })) }], [SID2, { title: null, events: EVENTS.map((e) => ({ ...e })) }]])
   const followers = new Set()
@@ -35,7 +37,10 @@ function mockGateway() {
       const r = args.request ?? args._request
       calls.push({ method, request: r })
       const s = sessions.get(r?.sessionId ?? r?.address?.sessionId)
-      if (method === 'projections') return s ? { asOfSeq: s.events.length - 1, values: { title: s.title, permissions: { currentValue: s.permission ?? 'danger-full-access' }, inbox: { 'next-turn': s.inbox ?? [], 'next-step': [] } } } : null
+      if (method === 'projections') {
+        if (gw.noProjectionsRpc) throw Object.assign(new Error('no such method'), { code: 'gateway/invocation-unavailable' })
+        return s ? projectionsFor(s) : null
+      }
       if (method === 'updateQueue') {
         const at = (s.inbox ?? []).findIndex((m) => m.id === r.itemId)
         if (at < 0) throw Object.assign(new Error('gone'), { code: 'session/queue-item-not-found' })
@@ -60,7 +65,7 @@ function mockGateway() {
       const sessionId = args.request.address.sessionId
       const s = sessions.get(sessionId)
       if (!s) throw Object.assign(new Error('not found'), { code: 'session/not-found' })
-      const queue = [{ type: 'snapshot', cursor: s.events.length - 1, records: s.events.map((event) => ({ type: 'event', event })), hasMore: false }]
+      const queue = [{ type: 'snapshot', cursor: s.events.length - 1, records: s.events.map((event) => ({ type: 'event', event })), hasMore: false, projections: projectionsFor(s) }]
       let wake
       const f = { sessionId, push: (x) => { queue.push(x); wake?.() } }
       followers.add(f)
@@ -340,4 +345,24 @@ test('no read-only session, no share', async (t) => {
   assert.equal(res.status, 400)
   assert.equal(res.body.error, 'share-room/permission-unavailable')
   assert.equal((await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared, null)
+})
+
+test('DSH 0.1.5 (no session/projections RPC): reads projections from the follow snapshot', async (t) => {
+  const h = await boot()
+  t.after(h.close)
+  h.gw.noProjectionsRpc = true
+  const created = await h.owner('/api/share-room.create', { sessionId: SID, sourceSessionId: SRC, ownerName: 'C', guestName: 'D' })
+  assert.equal(created.status, 200, JSON.stringify(created.body))
+  assert.equal(h.gw.sessions.get(SID).permission, 'read-only')
+  // Probed once, then the fallback is used directly.
+  assert.equal(h.gw.calls.filter((c) => c.method === 'projections').length, 1)
+  const [, shareId, secret] = created.body.invitePath.match(/^\/share\/([^/]+)\/#(.+)$/)
+  const joined = await h.guest(`${shareId}/join`, { body: { invite: secret } })
+  const cookie = joined.headers.get('set-cookie').split(';')[0]
+  const asked = await h.guest(`${shareId}/say`, { cookie, body: { mode: 'ai', text: 'hi' } })
+  assert.equal(asked.status, 200, await asked.clone().text())
+  h.gw.sessions.get(SID).permission = 'danger-full-access'
+  const refused = await h.guest(`${shareId}/say`, { cookie, body: { mode: 'ai', text: 'again' } })
+  assert.equal(refused.status, 409)
+  assert.equal(h.gw.calls.filter((c) => c.method === 'prompt').length, 1)
 })

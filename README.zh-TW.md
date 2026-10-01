@@ -2,7 +2,7 @@
 
 中文 | [English](README.md)
 
-> **狀態：v0.1 開發中。** 已在 DSH 0.1.7-rc.2 的測試容器完整跑通，尚未發布。請看 [PLAN.md](PLAN.md)。
+> **狀態：v0.1 開發中。** 已在 DSH 0.1.5-rc.1 與 0.1.7-rc.2 的測試環境完整跑通，尚未發布。請看 [PLAN.md](PLAN.md)。
 
 在 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的對話標題列按一下，就能把**單一**對話分享給別人一起討論。
 
