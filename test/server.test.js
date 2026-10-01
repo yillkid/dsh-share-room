@@ -22,17 +22,33 @@ function mockGateway() {
   const gw = {
     calls,
     sessions,
-    async invoke({ method, args }) {
+    async invoke({ namespace, method, args }) {
+      if (namespace === 'commands') {
+        calls.push({ method: `commands/${method}`, request: args })
+        assert.equal(method, 'execute')
+        const s = sessions.get(args.agentId)
+        const m = /^\/permission (\S+)$/.exec(args.line)
+        if (!s || !m || gw.refusePermission) return { commandId: 'c', result: { kind: 'error', text: 'no' } }
+        s.permission = m[1]
+        return { commandId: 'c', result: { kind: 'success', text: `preset ${m[1]}` } }
+      }
       const r = args.request ?? args._request
       calls.push({ method, request: r })
       const s = sessions.get(r?.sessionId ?? r?.address?.sessionId)
-      if (method === 'projections') return s ? { asOfSeq: s.events.length - 1, values: { title: s.title } } : null
+      if (method === 'projections') return s ? { asOfSeq: s.events.length - 1, values: { title: s.title, permissions: { currentValue: s.permission ?? 'danger-full-access' }, inbox: { 'next-turn': s.inbox ?? [], 'next-step': [] } } } : null
+      if (method === 'updateQueue') {
+        const at = (s.inbox ?? []).findIndex((m) => m.id === r.itemId)
+        if (at < 0) throw Object.assign(new Error('gone'), { code: 'session/queue-item-not-found' })
+        s.inbox.splice(at, 1)
+        return { accepted: true }
+      }
       if (method === 'rename') { s.title = r.title; return { accepted: true } }
       if (method === 'page') return { records: s.events.map((event) => ({ type: 'event', event })), hasMore: false }
       if (method === 'prompt') {
+        if (s.busy) { (s.inbox ??= []).push({ id: `m-${r.requestId}`, source: { kind: 'user', rpcId: r.requestId }, content: r.content }); return { accepted: true } }
         const seq = s.events.length
         const event = { type: 'user/message', seq, time: Date.now(), data: { content: r.content, source: { kind: 'user', rpcId: 'x' }, role: 'user' } }
-        const answer = { type: 'assistant/message', seq: seq + 1, time: Date.now(), data: { message: { role: 'assistant', content: [{ type: 'text', text: 'ANSWER' }, { type: 'tool-call', id: 'c', name: 'bash', arguments: '{"command":"cat /secret"}' }] } } }
+        const answer = { type: 'assistant/message', seq: seq + 1, time: Date.now(), data: { message: { role: 'assistant', source: { kind: 'model' }, content: [{ type: 'text', text: 'ANSWER' }, { type: 'tool-call', id: 'c', name: 'bash', arguments: '{"command":"cat /secret"}' }] } } }
         s.events.push(event, answer)
         for (const f of followers) if (f.sessionId === r.sessionId) { f.push({ type: 'event', event }); f.push({ type: 'event', event: answer }) }
         return { accepted: true }
@@ -264,7 +280,10 @@ test('invite brute force is rate limited, but only failures count', async (t) =>
   let last
   for (let i = 0; i < 25; i++) last = (await h.guest(`${shareId}/invite-info`, { body: { invite: 'A'.repeat(43) } })).status
   assert.equal(last, 429)
-  assert.equal((await h.guest(`${shareId}/join`, { body: { invite: secret } })).status, 429)
+  // Wrong guesses stay blocked, and a blocked guess no longer even says whether it was wrong...
+  assert.equal((await h.guest(`${shareId}/join`, { body: { invite: 'B'.repeat(43) } })).status, 429)
+  // ...but the real invite holder can never be locked out by strangers.
+  assert.equal((await h.guest(`${shareId}/join`, { body: { invite: secret } })).status, 200)
 })
 
 test('failed invite attempts on one share do not lock out another share', async (t) => {
@@ -276,4 +295,49 @@ test('failed invite attempts on one share do not lock out another share', async 
   const b = await h.owner('/api/share-room.create', { sessionId: SID2, sourceSessionId: SRC, ownerName: 'C', guestName: 'E' })
   const [, idB, secretB] = b.body.invitePath.match(/^\/share\/([^/]+)\/#(.+)$/)
   assert.equal((await h.guest(`${idB}/join`, { body: { invite: secretB } })).status, 200)
+})
+
+test('ending the share withdraws guest prompts still queued; owner prompts stay', async (t) => {
+  const h = await shareAndJoin(t)
+  const session = h.gw.sessions.get(SID)
+  session.busy = true // a turn is running: new prompts wait in the inbox
+  assert.equal((await h.guest(`${h.shareId}/say`, { body: { text: 'guest question', mode: 'ai' }, cookie: h.cookie })).status, 200)
+  const envelope = { type: 'client-request', rpcId: 'r9', method: 'session/prompt', payload: { args: { request: { requestId: 'owner-q', sessionId: SID, mode: 'queue', content: [{ type: 'text', text: 'owner question' }] } } } }
+  await h.routes.get('/api/session/prompt').fetch(new Request(`${h.base}/api/session/prompt`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(envelope) }))
+  assert.equal(session.inbox.length, 2)
+  const share = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared
+  assert.equal((await h.owner('/api/share-room.end', { shareId: share.id })).status, 200)
+  assert.deepEqual(session.inbox.map((m) => m.source.rpcId), ['owner-q'])
+})
+
+test('removing a guest withdraws only that guest\'s queued prompts', async (t) => {
+  const h = await shareAndJoin(t)
+  const session = h.gw.sessions.get(SID)
+  session.busy = true
+  assert.equal((await h.guest(`${h.shareId}/say`, { body: { text: 'q1', mode: 'ai' }, cookie: h.cookie })).status, 200)
+  const share = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared
+  await h.owner('/api/share-room.remove-guest', { shareId: share.id, guestId: share.guests[0].guestId })
+  assert.equal(session.inbox.length, 0)
+})
+
+test('the shared session is made read-only before any invite; guests stop if the owner raises it', async (t) => {
+  const h = await shareAndJoin(t)
+  assert.equal(h.gw.sessions.get(SID).permission, 'read-only')
+  assert.equal(h.gw.sessions.get(SRC).permission, undefined, 'the original session is untouched')
+  h.gw.sessions.get(SID).permission = 'danger-full-access'
+  const ask = await h.guest(`${h.shareId}/say`, { body: { text: 'q', mode: 'ai' }, cookie: h.cookie })
+  assert.equal(ask.status, 409)
+  assert.equal(h.gw.calls.filter((c) => c.method === 'prompt').length, 0)
+  const state = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
+  assert.equal(state.aiLeft, 50, 'refused questions are refunded')
+})
+
+test('no read-only session, no share', async (t) => {
+  const h = await boot()
+  t.after(h.close)
+  h.gw.refusePermission = true
+  const res = await h.owner('/api/share-room.create', { sessionId: SID, sourceSessionId: SRC, ownerName: 'C', guestName: 'D' })
+  assert.equal(res.status, 400)
+  assert.equal(res.body.error, 'share-room/permission-unavailable')
+  assert.equal((await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared, null)
 })

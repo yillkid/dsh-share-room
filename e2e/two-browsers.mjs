@@ -82,6 +82,15 @@ try {
   const manage = owner.locator('[data-testid=share-room-manage-button]')
   await manage.waitFor({ timeout: 20_000 })
   assert.match(await manage.textContent(), /分享中 · 0 位訪客/)
+  // The shared session runs read-only; the original keeps its own permission.
+  const permissionOf = async (id) => (await rpc('session/projections', { sessionId: id })).values.permissions?.currentValue
+  const sharedNow = await owner.evaluate(async (src) => {
+    const r = await fetch(`/api/share-room.state?sessionId=${encodeURIComponent(src)}`)
+    return (await r.json()).fromHere?.[0]?.sessionId
+  }, source)
+  assert.ok(sharedNow && sharedNow !== source, 'the share lives in a forked session')
+  assert.equal(await permissionOf(sharedNow), 'read-only', 'shared session is read-only')
+  assert.notEqual(await permissionOf(source), 'read-only', 'source session permission untouched')
   // The invite link never enters the conversation.
   assert.equal(await owner.getByText(link.split('#')[1]).count(), 0)
   step('share created, owner switched to shared session')

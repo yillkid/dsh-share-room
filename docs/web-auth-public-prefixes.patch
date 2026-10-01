@@ -1,6 +1,8 @@
---- /tmp/sr-dev/web-auth-index.orig.js	2026-10-01 15:14:35.928082142 +0800
-+++ /tmp/sr-dev/web-auth-index.new.js	2026-10-01 15:28:19.759339818 +0800
-@@ -35,8 +35,39 @@
+diff --git a/src/index.js b/src/index.js
+index bc8c228..a239731 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -35,8 +35,84 @@ export const Config = Schema.object({
    // tickets. Deliberately NOT the password hash: a ticket signer must never be
    // able to derive or verify the site password. Empty disables the feature.
    entrySecret: Schema.string().default(''),
@@ -37,10 +39,55 @@
 +  })
 +}
 +
++/** Login cookies: this gate's own, and DSH's native browser session cookie. */
++function isLoginCookie(name) {
++  return name === COOKIE_NAME || name.startsWith('dsh-auth-')
++}
++
++/**
++ * A public route never sees the visitor's login cookies and can never set them
++ * (no reading, no cookie tossing): only its own cookies pass either way.
++ */
++export function stripLoginCookies(req, res) {
++  const header = req.headers.cookie
++  if (typeof header === 'string') {
++    const kept = header.split(';').filter((part) => {
++      const name = part.split('=', 1)[0].trim()
++      return name !== '' && !isLoginCookie(name)
++    })
++    if (kept.length > 0) req.headers.cookie = kept.map((part) => part.trim()).join('; ')
++    else delete req.headers.cookie
++  }
++  const setHeader = res.setHeader.bind(res)
++  const safe = (value) => {
++    const list = (Array.isArray(value) ? value : [value]).filter((c) => !isLoginCookie(String(c).split('=', 1)[0].trim()))
++    return Array.isArray(value) ? list : list[0]
++  }
++  res.setHeader = (name, value) => {
++    if (String(name).toLowerCase() !== 'set-cookie') return setHeader(name, value)
++    const filtered = safe(value)
++    if (filtered === undefined || (Array.isArray(filtered) && filtered.length === 0)) return res
++    return setHeader(name, filtered)
++  }
++  const writeHead = res.writeHead.bind(res)
++  res.writeHead = (status, ...rest) => {
++    const headers = rest.find((x) => x !== null && typeof x === 'object')
++    if (headers && !Array.isArray(headers)) {
++      for (const key of Object.keys(headers)) {
++        if (key.toLowerCase() !== 'set-cookie') continue
++        const filtered = safe(headers[key])
++        if (filtered === undefined || (Array.isArray(filtered) && filtered.length === 0)) delete headers[key]
++        else headers[key] = filtered
++      }
++    }
++    return writeHead(status, ...rest)
++  }
++}
++
  // Where the persisted session map lives. WEB_AUTH_SESSION_STORE takes an
  // explicit path, or the literal 'off' to restore the original in-memory-only
  // behaviour. Otherwise it sits beside the plugin's own state under DSH_HOME.
-@@ -248,6 +279,7 @@
+@@ -248,6 +324,7 @@ export default class AuthenticatedWebServer extends Service {
      this.config = config
      this.logger = ctx.logger('dsh-web-auth')
      this.routes = new Map()
@@ -48,11 +95,14 @@
      this.upgrades = new Map()
      this.indexTaps = [injectAuthBootstrap, rebrandIndex]
      this.fallback = undefined
-@@ -679,6 +711,20 @@
+@@ -679,6 +756,26 @@ export default class AuthenticatedWebServer extends Service {
        return this.handleAuthRoute(pathname, url, req, res)
      }
  
-+    const publicPrefix = canonicalPath(pathname) && url.pathname.split('/').every((seg) => !/%2f|%5c|%2e/i.test(seg))
++    // Public only when the raw path is already canonical and needs no decoding,
++    // so the gate and every downstream router see the very same path.
++    const rawPath = String(req.url ?? '/').split(/[?#]/, 1)[0]
++    const publicPrefix = rawPath === url.pathname && rawPath === pathname && !rawPath.startsWith('//') && canonicalPath(pathname)
 +      ? this.publicPrefixes.find((p) => pathname === p || pathname.startsWith(`${p}/`))
 +      : undefined
 +    if (publicPrefix !== undefined) {
@@ -61,7 +111,10 @@
 +      const route = [...this.routes.values()]
 +        .filter((r) => r.kind === 'prefix' && (r.path === publicPrefix || r.path.startsWith(`${publicPrefix}/`)) && (pathname === r.path || pathname.startsWith(`${r.path}/`)))
 +        .sort((a, b) => b.path.length - a.path.length)[0]
-+      if (route) return route.handler(req, res)
++      if (route) {
++        stripLoginCookies(req, res)
++        return route.handler(req, res)
++      }
 +      res.statusCode = 404
 +      return res.end('Not Found')
 +    }

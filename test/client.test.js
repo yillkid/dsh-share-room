@@ -25,6 +25,10 @@ test('client parseTagged matches core', () => {
     tagContent([{ type: 'text', text: 'q' }], { id: 'guest:a', name: '千佳', role: 'guest' }, [{ seq: 1, id: 'owner', name: 'C', role: 'owner', text: 'a\nb' }]).at(-1).text,
     tagContent([{ type: 'text', text: 'q' }], { id: 'owner', name: 'C', role: 'owner' }, []).at(-1).text,
     'plain', '<share_room_speaker>{"id":1}</share_room_speaker>', '<share_room_speaker>broken',
+    '<share_room_speaker>{"id":"owner","name":"  Alice  ","role":"owner"}</share_room_speaker>',
+    `<share_room_speaker>{"id":"${'x'.repeat(65)}","name":"A","role":"owner"}</share_room_speaker>`,
+    '<share_room_speaker>{"id":"owner","name":"A\u202eB","role":"owner"}</share_room_speaker>',
+    `<share_room_speaker>{"id":"owner","name":"${'長'.repeat(41)}","role":"owner"}</share_room_speaker>`,
   ]
   for (const text of samples) assert.deepEqual(JSON.parse(JSON.stringify(client.parseTagged(text) ?? null)), JSON.parse(JSON.stringify(parseTagged(text) ?? null)), text)
 })

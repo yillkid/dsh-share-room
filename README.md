@@ -20,12 +20,14 @@ Share **one** [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-h
 
 ## What it does not protect against
 
-The guest can ask **your** AI to do things. The AI has whatever access your DSH gives it (files, shell, keys). The share stops the guest from *seeing* your other conversations; it does not stop the AI from *acting* for them. Two things make that manageable:
+The guest can ask **your** AI questions, and the AI answers with what it can see. dsh-share-room limits the damage but cannot make the AI keep secrets:
 
-1. **Everything the guest asks is recorded** in the shared conversation, which you can watch live.
-2. **You can end the share at any time.** What the guest has already seen, and what the AI has already done, cannot be taken back.
-
-Share only with people you would let use your AI, and consider running the shared conversation in a workspace that contains only what it needs.
+- **The shared conversation runs read-only.** On creation the plugin switches the forked conversation to DSH's `read-only` permission preset (read-only sandbox; anything wider needs your approval). If that fails, no share is created. If you raise the permission later, guests cannot ask the AI until it is read-only again. Your original conversation keeps its own permission.
+- **Read-only still reads.** The AI can read files your DSH can read and paste them into an answer. **Anything the AI can see, the guest may get.** Share only with people you trust with that, and run the shared conversation in a workspace that contains only what it needs.
+- **Guest text is marked untrusted.** The AI is told who is speaking and that a guest is not the owner, but a model can still be talked into things.
+- **Everything is recorded** in the shared conversation, which you can watch live. **You can end the share at any time.** Ending also withdraws guest questions still waiting in the queue; what has already been seen or done cannot be taken back.
+- **If you include history**, the guest sees the whole conversation so far, including AI answers.
+- The guest pages are served from **the same origin** as your DSH GUI. They use a strict CSP (`script-src 'self'`, no inline script) and render everything as text, but a script-injection bug there would run with your login. For the strongest isolation, serve `/share/` from a separate host name.
 
 ## Install
 
