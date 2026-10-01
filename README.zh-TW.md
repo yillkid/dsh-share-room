@@ -38,7 +38,11 @@
 # 再把 "dsh-share-room" 加進 profile package.json 的 dsh.profile.bundles
 ```
 
-已在 DSH `0.1.7-rc.2` 測試。擁有者的 API 在 `/api/share-room.*`，用 DSH 本身的登入；訪客頁面在 `/share/<id>/`，由外掛自己驗證訪客。如果你的 DSH 前面有整站登入閘門（例如 `@summersec/dsh-web-auth`），閘門必須放行 `/share/`、而且只放行它，請看 [docs/web-auth-public-prefixes.md](docs/web-auth-public-prefixes.md)。
+已在 DSH `0.1.5-rc.1` 與 `0.1.7-rc.2` 測試。擁有者的 API 在 `/api/share-room.*`，用 DSH 本身的登入；訪客頁面在 `/share/<id>/`，由外掛自己驗證訪客。如果你的 DSH 前面有整站登入閘門（例如 `@summersec/dsh-web-auth`），閘門必須放行 `/share/`、而且只放行它，請看 [docs/web-auth-public-prefixes.md](docs/web-auth-public-prefixes.md)。
+
+### 開關
+
+裝好就是開的。站主可以在「設定 → 一般 → 對話分享」關掉：關閉時不能建立新分享或邀請，所有訪客立刻暫停（看到「分享暫停中」）；分享、連結和紀錄都不刪除，重新開啟後恢復。站台範本若想預設關閉，可在 `cordis.patch.yml` 給 `share-room` 設 `config: { enabled: false }`；站主自己的選擇優先。
 
 如果 DSH 經由反向代理以 HTTPS 提供，代理送出 `X-Forwarded-Proto: https` 時，訪客 cookie 會自動加上 `Secure`。也可以設 `SHARE_ROOM_SECURE_COOKIE=1` 強制開啟。
 

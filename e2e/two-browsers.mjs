@@ -42,6 +42,8 @@ try {
     if (!j.result?.ok) throw new Error(`${method}: ${JSON.stringify(j)}`)
     return j.result.value
   }, [method, request])
+  // A previous failed run may have left sharing switched off.
+  await owner.evaluate(() => fetch('/api/share-room.site', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: true }) }))
   const source = (await rpc('session/create', {})).sessionId
   // DSH 0.1.7 has session/projections; on 0.1.5 find the cursor by probing page.
   const cursorOf = async (id) => {
@@ -218,6 +220,29 @@ try {
   await owner.locator('[data-share-room=toggle-ai]').check()
   await guest.waitForFunction(() => document.querySelector('[data-testid=mode]')?.disabled === false, null, { timeout: 10_000 })
   step('AI switch takes effect for the guest immediately')
+
+  // ---- site switch (設定 → 一般) off → guest paused; back on → guest resumes -------
+  await owner.keyboard.press('Escape')
+  await owner.getByText(/^(設定|设置|Settings)$/).last().click()
+  const siteSwitch = owner.locator('[data-share-room=site-enabled]')
+  await siteSwitch.waitFor({ timeout: 15_000 })
+  assert.equal(await siteSwitch.isChecked(), true, 'sharing is on by default')
+  await shot(owner, '07a-settings')
+  owner.once('dialog', (d) => d.accept())
+  await siteSwitch.click()
+  await owner.waitForFunction(() => document.querySelector('[data-share-room=site-enabled]')?.checked === false, null, { timeout: 10_000 })
+  await guest.getByText('分享暫停中').waitFor({ timeout: 10_000 })
+  const pausedSay = await guest.evaluate(async () => (await fetch(location.pathname + 'say', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'x', mode: 'discuss' }) })).status)
+  assert.equal(pausedSay, 403)
+  await shot(guest, '07b-guest-paused')
+  await siteSwitch.click()
+  await owner.waitForFunction(() => document.querySelector('[data-share-room=site-enabled]')?.checked === true, null, { timeout: 10_000 })
+  await guest.getByTestId('retry').click()
+  await guest.locator('[data-testid=input]').waitFor({ timeout: 15_000 })
+  await owner.keyboard.press('Escape')
+  await manage.waitFor({ timeout: 15_000 })
+  await manage.click()
+  step('site switch pauses every guest and resumes them')
 
   // ---- end share → guest read-only immediately -----------------------------------
   owner.once('dialog', (d) => d.accept())

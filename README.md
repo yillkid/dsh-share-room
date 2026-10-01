@@ -38,7 +38,11 @@ Not yet on npm. From a checkout:
 # then add "dsh-share-room" to dsh.profile.bundles in the profile's package.json
 ```
 
-Tested with DSH `0.1.7-rc.2`. Owner routes live under `/api/share-room.*` and use DSH's own login; guest pages live under `/share/<id>/` and authenticate guests themselves. If your DSH sits behind a login gate for the whole server (for example `@summersec/dsh-web-auth`), that gate must let `/share/` through without opening anything else; see [docs/web-auth-public-prefixes.md](docs/web-auth-public-prefixes.md).
+Tested with DSH `0.1.5-rc.1` and `0.1.7-rc.2`. Owner routes live under `/api/share-room.*` and use DSH's own login; guest pages live under `/share/<id>/` and authenticate guests themselves. If your DSH sits behind a login gate for the whole server (for example `@summersec/dsh-web-auth`), that gate must let `/share/` through without opening anything else; see [docs/web-auth-public-prefixes.md](docs/web-auth-public-prefixes.md).
+
+### On/off switch
+
+On once installed. The site owner can turn it off in Settings → General → 對話分享 (Sharing): no new shares or invites, and every guest is paused right away (they see “分享暫停中”). Nothing is deleted; turning it back on resumes. A site template that wants it off by default can set `config: { enabled: false }` on `share-room` in `cordis.patch.yml`; the owner's own choice wins.
 
 If DSH is reached over HTTPS through a reverse proxy, the guest cookie gets `Secure` automatically when the proxy sends `X-Forwarded-Proto: https`. Set `SHARE_ROOM_SECURE_COOKIE=1` to force it.
 

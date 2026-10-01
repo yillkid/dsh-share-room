@@ -84,7 +84,7 @@ function mockGateway() {
   return gw
 }
 
-async function boot() {
+async function boot({ dir = mkdtempSync(join(tmpdir(), 'share-room-srv-')), config = {} } = {}) {
   const routes = new Map()
   let prefix
   const disposers = []
@@ -96,7 +96,7 @@ async function boot() {
     connection: { fetch: { register: (r) => { routes.set(r.path, r); return () => routes.delete(r.path) } } },
     webServer: { register: (r) => { prefix = r; return () => {} } },
   }
-  plugin.apply(ctx, { dir: mkdtempSync(join(tmpdir(), 'share-room-srv-')) })
+  plugin.apply(ctx, { dir, ...config })
   const server = createServer((req, res) => {
     if (req.url.startsWith('/share/') || req.url === '/share') return prefix.handler(req, res)
     res.writeHead(404).end()
@@ -114,7 +114,7 @@ async function boot() {
     headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(cookie ? { cookie } : {}), ...(origin ? { origin } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
-  return { base, gw, routes, owner, guest, close: () => { for (const d of disposers) d(); server.closeAllConnections(); server.close() } }
+  return { base, dir, gw, routes, owner, guest, close: () => { for (const d of disposers) d(); server.closeAllConnections(); server.close() } }
 }
 
 async function readSse(res, until, timeoutMs = 3000) {
@@ -365,4 +365,67 @@ test('DSH 0.1.5 (no session/projections RPC): reads projections from the follow 
   const refused = await h.guest(`${shareId}/say`, { cookie, body: { mode: 'ai', text: 'again' } })
   assert.equal(refused.status, 409)
   assert.equal(h.gw.calls.filter((c) => c.method === 'prompt').length, 1)
+})
+
+test('site switch: on by default; off pauses guests and blocks new shares; back on resumes', async (t) => {
+  const h = await shareAndJoin(t)
+  assert.deepEqual((await h.owner('/api/share-room.site')).body, { enabled: true })
+  assert.equal((await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.enabled, true)
+
+  const off = await h.owner('/api/share-room.site', { enabled: false })
+  assert.deepEqual(off.body, { enabled: false })
+  // Guests are paused, not removed.
+  for (const path of ['state', 'events']) {
+    const r = await h.guest(`${h.shareId}/${path}`, { cookie: h.cookie })
+    assert.equal(r.status, 403, path)
+    assert.equal((await r.json()).error, 'disabled')
+  }
+  const say = await h.guest(`${h.shareId}/say`, { body: { text: 'q', mode: 'ai' }, cookie: h.cookie })
+  assert.equal(say.status, 403)
+  assert.equal(h.gw.calls.filter((c) => c.method === 'prompt').length, 0)
+  const share = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared
+  // New shares and new invites are refused.
+  const invite = await h.owner('/api/share-room.invite', { shareId: share.id, guestName: 'E' })
+  assert.equal(invite.status, 400)
+  assert.equal(invite.body.error, 'share-room/disabled')
+  const created = await h.owner('/api/share-room.create', { sessionId: SID2, sourceSessionId: SRC, ownerName: 'C', guestName: 'F' })
+  assert.equal(created.body.error, 'share-room/disabled')
+  // Guest page shell and assets still load so guests can see why.
+  assert.equal((await h.guest(`${h.shareId}/`)).status, 200)
+  assert.equal((await h.guest('_/app.js')).status, 200)
+
+  await h.owner('/api/share-room.site', { enabled: true })
+  const back = await h.guest(`${h.shareId}/state`, { cookie: h.cookie })
+  assert.equal(back.status, 200)
+  assert.equal((await h.guest(`${h.shareId}/say`, { body: { text: 'q', mode: 'ai' }, cookie: h.cookie })).status, 200)
+})
+
+test('site switch persists across restarts, validates input, and honours the config default', async (t) => {
+  const h = await boot()
+  t.after(h.close)
+  assert.equal((await h.owner('/api/share-room.site', { enabled: 'no' })).status, 400)
+  await h.owner('/api/share-room.site', { enabled: false })
+  assert.equal(JSON.parse(readFileSync(join(h.dir, 'settings.json'), 'utf8')).enabled, false)
+  const again = await boot({ dir: h.dir })
+  t.after(again.close)
+  assert.deepEqual((await again.owner('/api/share-room.site')).body, { enabled: false })
+  // A site template may default it off; the owner's own choice still wins.
+  const offByDefault = await boot({ config: { enabled: false } })
+  t.after(offByDefault.close)
+  assert.deepEqual((await offByDefault.owner('/api/share-room.site')).body, { enabled: false })
+  await offByDefault.owner('/api/share-room.site', { enabled: true })
+  assert.deepEqual((await offByDefault.owner('/api/share-room.site')).body, { enabled: true })
+})
+
+test('site switch: invite exchange is refused while off and the invite stays usable', async (t) => {
+  const h = await boot()
+  t.after(h.close)
+  const created = await h.owner('/api/share-room.create', { sessionId: SID, sourceSessionId: SRC, ownerName: 'C', guestName: 'D' })
+  const [, shareId, secret] = created.body.invitePath.match(/^\/share\/([^/]+)\/#(.+)$/)
+  await h.owner('/api/share-room.site', { enabled: false })
+  const info = await h.guest(`${shareId}/invite-info`, { body: { invite: secret } })
+  assert.equal(info.status, 403)
+  assert.equal((await h.guest(`${shareId}/join`, { body: { invite: secret } })).status, 403)
+  await h.owner('/api/share-room.site', { enabled: true })
+  assert.equal((await h.guest(`${shareId}/join`, { body: { invite: secret } })).status, 200)
 })
