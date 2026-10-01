@@ -8,7 +8,7 @@
 
 ![站主在電腦上分享對話，兩位訪客用手機加入、討論、問 AI](docs/media/demo.gif)
 
-完整影片（含字幕）：[docs/media/demo.mp4](docs/media/demo.mp4)
+完整影片（含字幕）：[docs/media/demo.mp4](docs/media/demo.mp4)・討論與回饋：[DSH Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions/8564)
 
 ## 它做什麼
 

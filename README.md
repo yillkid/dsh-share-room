@@ -8,7 +8,7 @@ A plugin for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-ha
 
 ![The owner shares a conversation from a desktop; two guests join on their phones, discuss, and ask the AI](docs/media/demo.gif)
 
-Full video with captions: [docs/media/demo.mp4](docs/media/demo.mp4)
+Full video with captions: [docs/media/demo.mp4](docs/media/demo.mp4) · Discussion and feedback: [DSH Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions/8564)
 
 > The UI text is currently in Traditional Chinese.
 

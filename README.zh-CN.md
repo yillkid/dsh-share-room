@@ -8,7 +8,7 @@
 
 ![站主在电脑上分享对话，两位访客用手机加入、讨论、问 AI](docs/media/demo.gif)
 
-完整视频（含字幕）：[docs/media/demo.mp4](docs/media/demo.mp4)
+完整视频（含字幕）：[docs/media/demo.mp4](docs/media/demo.mp4)・讨论与反馈：[DSH Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions/8564)
 
 > 界面文字目前是繁体中文。
 
