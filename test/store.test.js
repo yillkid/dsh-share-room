@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ShareStore, guestView, ownerView } from '../lib/store.js'
+import { ShareStore, guestView, ownerView, presetOf } from '../lib/store.js'
 
 const DAY = 86_400_000
 const SID = 'session-11111111-2222-3333-4444-555555555555'
@@ -137,4 +137,67 @@ test('owner view never exposes hashes', () => {
   store.invite(share.id, 'E')
   const json = JSON.stringify(ownerView(store, share))
   assert.ok(!/Hash/.test(json))
+})
+
+test('AI budget can be raised or lowered later, never below what was used', () => {
+  const { store } = fresh()
+  const share = make(store, { aiBudget: 3 })
+  store.chargeAi(share.id, 'g')
+  store.chargeAi(share.id, 'g')
+  assert.throws(() => store.settings_(share.id, { aiBudget: 1 }), /已經問了 2 次/)
+  assert.throws(() => store.settings_(share.id, { aiBudget: 'lots' }), /整數/)
+  assert.equal(store.get(share.id).aiBudget, 3, 'a refused change changes nothing')
+  store.settings_(share.id, { aiBudget: 2 })
+  assert.throws(() => store.chargeAi(share.id, 'g'), /用完/)
+  store.settings_(share.id, { aiBudget: 20 })
+  store.chargeAi(share.id, 'g')
+  assert.equal(store.get(share.id).aiUsed, 3)
+})
+
+test('days left: extend or shorten a live share, capped at 90 days from creation', () => {
+
+  const { store, clock } = fresh()
+  const share = make(store, { ttlDays: 7 })
+  const created = share.createdAt
+  store.invite(share.id, 'E', { ttlDays: 7 })
+  clock.advance(5 * DAY)
+  store.setDaysLeft(share.id, 30)
+  assert.equal(store.get(share.id).expiresAt, created + 35 * DAY)
+  store.setDaysLeft(share.id, 1)
+  assert.equal(store.get(share.id).expiresAt, created + 6 * DAY)
+  assert.ok(store.get(share.id).invites.every((i) => i.expiresAt <= created + 6 * DAY), 'unused invites never outlive the share')
+  assert.throws(() => store.setDaysLeft(share.id, 86), /最多還能設 85 天/)
+  store.setDaysLeft(share.id, 85)
+  assert.equal(store.get(share.id).expiresAt, created + 90 * DAY)
+  for (const bad of [0, -1, 1.5, 'x', 91]) assert.throws(() => store.setDaysLeft(share.id, bad), /天數|最長/, String(bad))
+  clock.advance(85 * DAY)
+  assert.equal(store.access(store.get(share.id)), 'readonly')
+  assert.throws(() => store.setDaysLeft(share.id, 1), /已結束/, 'only live shares can be extended')
+  const ended = make(store, { sessionId: 'session-99999999-2222-3333-4444-555555555555' })
+  store.end(ended.id)
+  assert.throws(() => store.setDaysLeft(ended.id, 3), /已結束/)
+})
+
+test('permission preset: read-only by default and for shares made before 0.2.0; changes are audited', () => {
+  const { store, dir, reopen } = fresh()
+  const share = make(store)
+  assert.equal(presetOf(store.get(share.id)), 'read-only')
+  delete store.get(share.id).aiPreset
+  assert.equal(presetOf(store.get(share.id)), 'read-only')
+  assert.throws(() => store.setPreset(share.id, 'root'), /unknown/)
+  store.setPreset(share.id, 'danger-full-access')
+  assert.equal(presetOf(reopen().get(share.id)), 'danger-full-access')
+  const audit = readFileSync(join(dir, 'audit.jsonl'), 'utf8')
+  assert.match(audit, /"action":"share.permission","shareId":"[^"]+","from":"read-only","to":"danger-full-access"/)
+})
+
+test('site full-access switch is off unless turned on, and persists', () => {
+  const { store, reopen } = fresh()
+  assert.equal(store.fullAccessAllowed(), false)
+  assert.equal(store.fullAccessAllowed(true), true, 'a site template may default it on')
+  assert.throws(() => store.setFullAccessAllowed('yes'), /fullAccess/)
+  store.setFullAccessAllowed(true)
+  assert.equal(reopen().fullAccessAllowed(), true)
+  store.setFullAccessAllowed(false)
+  assert.equal(reopen().fullAccessAllowed(true), false, "the owner's choice wins over the default")
 })

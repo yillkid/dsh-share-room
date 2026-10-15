@@ -22,6 +22,7 @@ Full video with captions: [docs/media/demo.mp4](docs/media/demo.mp4) · Discussi
   - 🤖 **Ask AI**: the AI reads the discussion since the last question, then answers. Everyone sees the answer.
 - **Only this conversation.** Guests can't see your other conversations, files or settings.
 - **Revocable at any time.** You can remove a guest, turn off guest questions, or end the share. Once it ends, guests can't post. You can keep a read-only page for them to read and download.
+- **Adjustable while live.** You can extend or shorten a running share (up to 90 days from when it was created), change the guest-question limit, and choose the AI's permission.
 - **Site switch.** The whole feature can be turned off under Settings → General → 對話分享 (Conversation sharing).
 
 ## Screenshots
@@ -36,8 +37,9 @@ Full video with captions: [docs/media/demo.mp4](docs/media/demo.mp4) · Discussi
 
 Guests can ask **your** AI, and the AI answers with whatever it can see. dsh-share-room limits the damage, but it cannot make the AI keep a secret.
 
-- **You pay.** The AI runs on your DSH with your model key, and every question is billed to you, whoever asks. Guest questions share one limit per share, 50 by default.
-- **The shared conversation is read-only.** When a share is created, the plugin switches the forked conversation to DSH's `read-only` permission, so anything more needs your approval. If the switch fails, no share is created. If you raise the permission later, guests can't ask the AI until it is read-only again. Your original conversation keeps its own permission.
+- **You pay.** The AI runs on your DSH with your model key, and every question is billed to you, whoever asks. Guest questions share one limit per share, 50 by default, and you can change it later.
+- **The shared conversation starts read-only.** When a share is created, the plugin switches the forked conversation to DSH's `read-only` permission, so anything more needs your approval. If the switch fails, no share is created. Your original conversation keeps its own permission.
+- **Wider permission is your call.** In the share's manage dialog you can let guest questions run with `workspace-write` or full access. **Full access** lets the AI run any command and change or delete any file without asking you, so it must first be allowed under Settings → General → 分享可使用完全權限 (off by default), and each time you pick it you confirm again. Turning that switch off moves full-access shares back to read-only. If you raise the conversation above the chosen level from the composer, guests can't ask the AI until it's back. Every change is written to the audit log.
 - **Read-only can still read.** The AI can read any file your DSH can read and put it in an answer. **Whatever the AI can see, a guest may get.** Share only with people you trust, and run the shared conversation in a workspace that holds only what it needs.
 - **Guest text is marked untrusted.** The AI is told who is speaking and that guests are not the owner. A model can still be talked into things.
 - **Everything is visible.** Every message and every AI action is recorded in the shared conversation, and you see it live. Ending a share also withdraws guest questions still in the queue. Content that guests have already seen, and actions the AI has already taken, can't be undone.
@@ -66,7 +68,7 @@ Steps:
 
 To update, run `dsh plugin --profile web update dsh-share-room`. To uninstall, run `dsh plugin --profile web remove dsh-share-room`.
 
-To install from GitHub instead of npm: `dsh plugin --profile web add github:yillkid/dsh-share-room#v0.1.1`.
+To install from GitHub instead of npm: `dsh plugin --profile web add github:yillkid/dsh-share-room#v0.2.0`.
 
 Where things live:
 

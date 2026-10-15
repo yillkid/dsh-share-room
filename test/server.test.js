@@ -369,11 +369,11 @@ test('DSH 0.1.5 (no session/projections RPC): reads projections from the follow 
 
 test('site switch: on by default; off pauses guests and blocks new shares; back on resumes', async (t) => {
   const h = await shareAndJoin(t)
-  assert.deepEqual((await h.owner('/api/share-room.site')).body, { enabled: true })
+  assert.deepEqual((await h.owner('/api/share-room.site')).body, { enabled: true, fullAccess: false })
   assert.equal((await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.enabled, true)
 
   const off = await h.owner('/api/share-room.site', { enabled: false })
-  assert.deepEqual(off.body, { enabled: false })
+  assert.deepEqual(off.body, { enabled: false, fullAccess: false })
   // Guests are paused, not removed.
   for (const path of ['state', 'events']) {
     const r = await h.guest(`${h.shareId}/${path}`, { cookie: h.cookie })
@@ -408,13 +408,13 @@ test('site switch persists across restarts, validates input, and honours the con
   assert.equal(JSON.parse(readFileSync(join(h.dir, 'settings.json'), 'utf8')).enabled, false)
   const again = await boot({ dir: h.dir })
   t.after(again.close)
-  assert.deepEqual((await again.owner('/api/share-room.site')).body, { enabled: false })
+  assert.deepEqual((await again.owner('/api/share-room.site')).body, { enabled: false, fullAccess: false })
   // A site template may default it off; the owner's own choice still wins.
   const offByDefault = await boot({ config: { enabled: false } })
   t.after(offByDefault.close)
-  assert.deepEqual((await offByDefault.owner('/api/share-room.site')).body, { enabled: false })
+  assert.deepEqual((await offByDefault.owner('/api/share-room.site')).body, { enabled: false, fullAccess: false })
   await offByDefault.owner('/api/share-room.site', { enabled: true })
-  assert.deepEqual((await offByDefault.owner('/api/share-room.site')).body, { enabled: true })
+  assert.deepEqual((await offByDefault.owner('/api/share-room.site')).body, { enabled: true, fullAccess: false })
 })
 
 test('site switch: invite exchange is refused while off and the invite stays usable', async (t) => {
@@ -428,4 +428,102 @@ test('site switch: invite exchange is refused while off and the invite stays usa
   assert.equal((await h.guest(`${shareId}/join`, { body: { invite: secret } })).status, 403)
   await h.owner('/api/share-room.site', { enabled: true })
   assert.equal((await h.guest(`${shareId}/join`, { body: { invite: secret } })).status, 200)
+})
+
+test('permission: wider presets are the owner\'s choice; full access needs the site switch and a confirmation', async (t) => {
+  const h = await shareAndJoin(t)
+  const share = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared
+  assert.equal(share.aiPreset, 'read-only')
+  const ask = (text) => h.guest(`${h.shareId}/say`, { body: { text, mode: 'ai' }, cookie: h.cookie })
+
+  // workspace-write: applied to the session, and guests may ask under it.
+  const ww = await h.owner('/api/share-room.permission', { shareId: share.id, preset: 'workspace-write' })
+  assert.equal(ww.status, 200, JSON.stringify(ww.body))
+  assert.equal(ww.body.share.aiPreset, 'workspace-write')
+  assert.equal(h.gw.sessions.get(SID).permission, 'workspace-write')
+  assert.equal((await ask('q1')).status, 200)
+  // Running narrower than chosen is fine; wider than chosen is refused.
+  h.gw.sessions.get(SID).permission = 'read-only'
+  assert.equal((await ask('q2')).status, 200)
+  h.gw.sessions.get(SID).permission = 'danger-full-access'
+  assert.equal((await ask('q3')).status, 409)
+  h.gw.sessions.get(SID).permission = 'workspace-write'
+
+  // Full access: refused while the site switch is off, and without confirm.
+  const off = await h.owner('/api/share-room.permission', { shareId: share.id, preset: 'danger-full-access', confirm: true })
+  assert.equal(off.body.error, 'share-room/full-access-off')
+  assert.equal(h.gw.sessions.get(SID).permission, 'workspace-write', 'a refused change touches nothing')
+  assert.deepEqual((await h.owner('/api/share-room.site', { fullAccess: true })).body, { enabled: true, fullAccess: true })
+  const unconfirmed = await h.owner('/api/share-room.permission', { shareId: share.id, preset: 'danger-full-access' })
+  assert.equal(unconfirmed.body.error, 'share-room/confirm-required')
+  const full = await h.owner('/api/share-room.permission', { shareId: share.id, preset: 'danger-full-access', confirm: true })
+  assert.equal(full.status, 200, JSON.stringify(full.body))
+  assert.equal(h.gw.sessions.get(SID).permission, 'danger-full-access')
+  assert.equal((await ask('q4')).status, 200)
+  assert.equal(h.gw.calls.filter((c) => c.method === 'prompt').length, 3)
+
+  // Turning the site switch off takes the share back to read-only at once.
+  await h.owner('/api/share-room.site', { fullAccess: false })
+  assert.equal(h.gw.sessions.get(SID).permission, 'read-only')
+  assert.equal((await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared.aiPreset, 'read-only')
+  h.gw.sessions.get(SID).permission = 'danger-full-access'
+  assert.equal((await ask('q5')).status, 409)
+
+  // Junk is refused; the original session is never touched.
+  assert.equal((await h.owner('/api/share-room.permission', { shareId: share.id, preset: 'root' })).body.error, 'share-room/invalid-setting')
+  assert.equal(h.gw.sessions.get(SRC).permission, undefined)
+  const audit = readFileSync(join(h.dir, 'audit.jsonl'), 'utf8')
+  assert.match(audit, /"to":"danger-full-access"/)
+  assert.match(audit, /site.full-access-allowed/)
+})
+
+test('full access chosen but the site switch was turned off by hand: guests are refused', async (t) => {
+  const h = await shareAndJoin(t)
+  const share = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared
+  await h.owner('/api/share-room.site', { fullAccess: true })
+  await h.owner('/api/share-room.permission', { shareId: share.id, preset: 'danger-full-access', confirm: true })
+  // Simulate a failed downgrade: the switch is off but the share still says full access.
+  h.gw.refusePermission = true
+  await h.owner('/api/share-room.site', { fullAccess: false })
+  const res = await h.guest(`${h.shareId}/say`, { body: { text: 'q', mode: 'ai' }, cookie: h.cookie })
+  assert.equal(res.status, 409)
+  assert.equal(h.gw.calls.filter((c) => c.method === 'prompt').length, 0)
+})
+
+test('owner can extend the share and change the AI budget after it started', async (t) => {
+  const h = await shareAndJoin(t, { ttlDays: 2, aiBudget: 1 })
+  const share = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared
+  const ask = (text) => h.guest(`${h.shareId}/say`, { body: { text, mode: 'ai' }, cookie: h.cookie })
+  assert.equal((await ask('q1')).status, 200)
+  assert.equal((await ask('q2')).status, 409, 'budget used up')
+
+  const raised = await h.owner('/api/share-room.settings', { shareId: share.id, aiBudget: 5 })
+  assert.equal(raised.body.share.aiBudget, 5)
+  assert.equal((await ask('q3')).status, 200)
+  const tooLow = await h.owner('/api/share-room.settings', { shareId: share.id, aiBudget: 1 })
+  assert.equal(tooLow.status, 400)
+  assert.equal(tooLow.body.error, 'share-room/invalid-setting')
+
+  const before = share.expiresAt
+  const extended = await h.owner('/api/share-room.extend', { shareId: share.id, days: 30 })
+  assert.equal(extended.status, 200, JSON.stringify(extended.body))
+  assert.ok(extended.body.share.expiresAt > before + 27 * 86_400_000)
+  assert.equal(extended.body.share.maxExpiresAt, share.createdAt + 90 * 86_400_000)
+  const state = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
+  assert.equal(state.expiresAt, extended.body.share.expiresAt, 'guests see the new end date')
+  assert.equal(state.aiLeft, 3)
+  assert.equal((await h.owner('/api/share-room.extend', { shareId: share.id, days: 200 })).status, 400)
+
+  await h.owner('/api/share-room.end', { shareId: share.id })
+  assert.equal((await h.owner('/api/share-room.extend', { shareId: share.id, days: 3 })).body.error, 'share-room/not-active')
+})
+
+test('guest cookie lasts as long as the share could be extended to', async (t) => {
+  const h = await shareAndJoin(t, { ttlDays: 1 })
+  const maxAge = Number(/Max-Age=(\d+)/.exec(h.setCookie)[1])
+  assert.ok(maxAge > 89 * 86_400, `Max-Age ${maxAge}`)
+  assert.match(h.setCookie, /HttpOnly; SameSite=Strict/)
+  // /state refreshes it, keeping the same value (so 0.1.x cookies get the longer life).
+  const res = await h.guest(`${h.shareId}/state`, { cookie: h.cookie })
+  assert.equal(res.headers.get('set-cookie').split(';')[0], h.cookie)
 })
