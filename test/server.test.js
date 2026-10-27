@@ -81,6 +81,13 @@ function mockGateway() {
       }
     },
   }
+  /** Push one event to the session and to every live follower (as DSH would). */
+  gw.pushEvent = (sessionId, event) => {
+    const s = sessions.get(sessionId)
+    event.seq = s.events.length
+    s.events.push(event)
+    for (const f of followers) if (f.sessionId === sessionId) f.push({ type: 'event', event })
+  }
   return gw
 }
 
@@ -88,6 +95,8 @@ async function boot({ dir = mkdtempSync(join(tmpdir(), 'share-room-srv-')), conf
   const routes = new Map()
   let prefix
   const disposers = []
+  const listeners = {}
+  const archivedIds = []
   const gw = mockGateway()
   const ctx = {
     logger: () => ({ warn() {}, error(...a) { console.error(...a) }, info() {} }),
@@ -95,6 +104,9 @@ async function boot({ dir = mkdtempSync(join(tmpdir(), 'share-room-srv-')), conf
     effect: (fn) => { const d = fn(); if (typeof d === 'function') disposers.push(d) },
     connection: { fetch: { register: (r) => { routes.set(r.path, r); return () => routes.delete(r.path) } } },
     webServer: { register: (r) => { prefix = r; return () => {} } },
+    // user-questions/request listeners, so tests can play the Host asking a question
+    on: (name, fn) => { (listeners[name] ??= []).push(fn); return () => {} },
+    workspaceRegistry: { archivedSessionIds: archivedIds },
   }
   plugin.apply(ctx, { dir, ...config })
   const server = createServer((req, res) => {
@@ -114,7 +126,13 @@ async function boot({ dir = mkdtempSync(join(tmpdir(), 'share-room-srv-')), conf
     headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(cookie ? { cookie } : {}), ...(origin ? { origin } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
-  return { base, dir, gw, routes, owner, guest, close: () => { for (const d of disposers) d(); server.closeAllConnections(); server.close() } }
+  const setArchived = (sessionId, on) => {
+    const at = archivedIds.indexOf(sessionId)
+    if (on && at < 0) archivedIds.push(sessionId)
+    if (!on && at >= 0) archivedIds.splice(at, 1)
+    for (const fn of listeners['domain/changed'] ?? []) fn({ domain: 'workspace', table: '', operation: 'put' })
+  }
+  return { base, dir, gw, routes, owner, guest, listeners, setArchived, close: () => { for (const d of disposers) d(); server.closeAllConnections(); server.close() } }
 }
 
 async function readSse(res, until, timeoutMs = 3000) {
@@ -166,7 +184,7 @@ test('invite: page, confirm, single-use join, scoped HttpOnly cookie', async (t)
   assert.ok(!(await page.text()).includes(h.secret))
   const again = await h.guest(`${h.shareId}/join`, { body: { invite: h.secret } })
   assert.equal(again.status, 410)
-  assert.equal(h.gw.sessions.get(SID).title, '🔗 Original')
+  assert.equal(h.gw.sessions.get(SID).title, '🔗 Original（分享中・1 位）')
 })
 
 test('guest writes need same-origin JSON', async (t) => {
@@ -526,4 +544,254 @@ test('guest cookie lasts as long as the share could be extended to', async (t) =
   // /state refreshes it, keeping the same value (so 0.1.x cookies get the longer life).
   const res = await h.guest(`${h.shareId}/state`, { cookie: h.cookie })
   assert.equal(res.headers.get('set-cookie').split(';')[0], h.cookie)
+})
+
+// ---------------------------------------------------------------------------
+// 0.3.0: questions the AI asks (ask_user_question, plan review) reach the room.
+
+const PLAN_Q = { id: 'plan-review', header: '計畫', question: '核准這個計畫？', detail: '1. 改 A\n2. 改 B', options: [{ label: '核准' }, { label: '退回' }], intent: { kind: 'plan-review', approve: '核准' } }
+const CHOICE_Q = { id: 'q1', header: '版本', question: '用哪一版？', options: [{ label: 'A' }, { label: 'B' }] }
+
+/** Play the Host: ask through the waterfall with an owner page that answers when told to. */
+function ask(h, questions, { sessionId = SID } = {}) {
+  let ownerReply
+  const ownerAnswers = new Promise((r) => { ownerReply = r })
+  const controller = new AbortController()
+  const agent = { session: { header: { id: sessionId } } }
+  const [listener] = h.listeners['user-questions/request']
+  const result = listener({ questions, agent, signal: controller.signal }, () => ownerAnswers)
+  return { result, ownerReply, controller }
+}
+
+async function fullAccessShare(t) {
+  const h = await shareAndJoin(t)
+  const share = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared
+  await h.owner('/api/share-room.site', { fullAccess: true })
+  const r = await h.owner('/api/share-room.permission', { shareId: share.id, preset: 'danger-full-access', confirm: true })
+  assert.equal(r.status, 200, JSON.stringify(r.body))
+  return { ...h, share }
+}
+
+const pendingQuestions = async (h) => {
+  const res = await h.guest(`${h.shareId}/events`, { cookie: h.cookie })
+  const frames = await readSse(res, (out) => out.some((f) => f.type === 'questions'))
+  return frames.find((f) => f.type === 'questions')
+}
+
+test('questions: an unshared session goes straight to the owner page', async (t) => {
+  const h = await boot(); t.after(h.close)
+  const { result, ownerReply } = ask(h, [CHOICE_Q], { sessionId: SID2 })
+  ownerReply({ answers: [{ id: 'q1', selected: ['A'] }] })
+  assert.deepEqual(await result, { answers: [{ id: 'q1', selected: ['A'] }] })
+})
+
+test('questions: full access — a guest answers, the AI gets it, the room sees who', async (t) => {
+  const h = await fullAccessShare(t)
+  const { result } = ask(h, [CHOICE_Q])
+  const view = await pendingQuestions(h)
+  assert.equal(view.canAnswer, true)
+  assert.equal(view.pending.length, 1)
+  assert.equal(view.pending[0].questions[0].question, '用哪一版？')
+  const r = await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: view.pending[0].id, answers: [{ id: 'q1', selected: ['B'] }] } })
+  assert.equal(r.status, 200)
+  assert.deepEqual(await result, { answers: [{ id: 'q1', selected: ['B'] }] })
+  const disc = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body
+  const said = JSON.stringify(disc)
+  assert.match(said, /回答了 AI 的問題：版本：B/)
+})
+
+test('questions: plan review — guests see the plan and can approve it', async (t) => {
+  const h = await fullAccessShare(t)
+  const { result } = ask(h, [PLAN_Q])
+  const view = await pendingQuestions(h)
+  const q = view.pending[0].questions[0]
+  assert.equal(q.plan, true)
+  assert.equal(q.approve, '核准')
+  assert.match(q.detail, /改 A/)
+  await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: view.pending[0].id, answers: [{ id: 'plan-review', selected: ['核准'] }] } })
+  assert.deepEqual(await result, { answers: [{ id: 'plan-review', selected: ['核准'] }] })
+})
+
+test('questions: read-only and workspace-write — guests see it but cannot answer', async (t) => {
+  for (const preset of ['read-only', 'workspace-write']) {
+    const h = await shareAndJoin(t)
+    const share = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared
+    if (preset !== 'read-only') await h.owner('/api/share-room.permission', { shareId: share.id, preset })
+    const { result, ownerReply } = ask(h, [CHOICE_Q])
+    const view = await pendingQuestions(h)
+    assert.equal(view.canAnswer, false, preset)
+    assert.equal(view.pending.length, 1, 'still visible, so the room knows what the AI waits for')
+    const r = await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: view.pending[0].id, answers: [{ id: 'q1', selected: ['A'] }] } })
+    assert.equal(r.status, 403, preset)
+    ownerReply({ answers: [{ id: 'q1', selected: ['B'] }] })
+    assert.deepEqual(await result, { answers: [{ id: 'q1', selected: ['B'] }] }, 'the owner still decides')
+  }
+})
+
+test('questions: full access needs the site switch too', async (t) => {
+  const h = await fullAccessShare(t)
+  await h.owner('/api/share-room.site', { fullAccess: false })
+  const { ownerReply } = ask(h, [CHOICE_Q])
+  const view = await pendingQuestions(h)
+  assert.equal(view.canAnswer, false)
+  const r = await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: view.pending[0]?.id ?? 'x', answers: [] } })
+  assert.equal(r.status, 403)
+  ownerReply({ answers: [] })
+})
+
+test('questions: the owner page answering first withdraws it from the room', async (t) => {
+  const h = await fullAccessShare(t)
+  const { result, ownerReply } = ask(h, [CHOICE_Q])
+  const id = (await pendingQuestions(h)).pending[0].id
+  ownerReply({ answers: [{ id: 'q1', selected: ['A'] }] })
+  assert.deepEqual(await result, { answers: [{ id: 'q1', selected: ['A'] }] })
+  const late = await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: id, answers: [{ id: 'q1', selected: ['B'] }] } })
+  assert.equal(late.status, 409, 'first answer wins')
+  assert.equal((await pendingQuestions(h)).pending.length, 0)
+})
+
+test('questions: an answer must use the offered options', async (t) => {
+  const h = await fullAccessShare(t)
+  const { ownerReply } = ask(h, [CHOICE_Q])
+  const id = (await pendingQuestions(h)).pending[0].id
+  const multi = await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: id, answers: [{ id: 'q1', selected: ['A', 'B'] }] } })
+  assert.equal(multi.status, 400, 'single-select takes one')
+  const forged = await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: id, answers: [{ id: 'q1', selected: ['rm -rf /'] }] } })
+  assert.equal(forged.status, 200, 'unknown labels are dropped, not passed to the AI')
+  ownerReply({ answers: [] })
+})
+
+test('questions: ending the share or the turn being cancelled withdraws the question', async (t) => {
+  const h = await fullAccessShare(t)
+  const { result, ownerReply, controller } = ask(h, [CHOICE_Q])
+  const id = (await pendingQuestions(h)).pending[0].id
+  controller.abort()
+  ownerReply({ answers: [{ id: 'q1', selected: ['A'] }] })
+  await result
+  const r = await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: id, answers: [] } })
+  assert.equal(r.status, 409)
+
+  const second = ask(h, [CHOICE_Q])
+  assert.equal((await pendingQuestions(h)).pending.length, 1)
+  await h.owner('/api/share-room.end', { shareId: h.share.id })
+  second.ownerReply({ answers: [{ id: 'q1', selected: ['B'] }] })
+  assert.deepEqual(await second.result, { answers: [{ id: 'q1', selected: ['B'] }] }, 'the owner keeps it after the share ends')
+})
+
+// ---------------------------------------------------------------------------
+// 0.3.0: archiving the shared session pauses the share (DSH refuses its steps).
+
+test('archive: archiving the shared session pauses guests; unarchiving resumes', async (t) => {
+  const h = await shareAndJoin(t)
+  h.setArchived(SID, true)
+  const state = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
+  assert.equal(state.archived, true)
+  assert.equal(state.aiAllowed, false)
+  const say = await h.guest(`${h.shareId}/say`, { cookie: h.cookie, body: { text: 'hi' } })
+  assert.equal(say.status, 409)
+  assert.equal((await say.json()).error, 'archived')
+  const ask = await h.guest(`${h.shareId}/say`, { cookie: h.cookie, body: { text: 'hi', mode: 'ai' } })
+  assert.equal(ask.status, 409, 'no question is sent into a session DSH will not run')
+
+  h.setArchived(SID, false)
+  const back = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
+  assert.equal(back.archived, undefined)
+  assert.equal((await h.guest(`${h.shareId}/say`, { cookie: h.cookie, body: { text: 'hi' } })).status, 200)
+})
+
+test('archive: the share is paused, not ended (nothing is lost)', async (t) => {
+  const h = await shareAndJoin(t)
+  h.setArchived(SID, true)
+  const owner = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body
+  assert.equal(owner.shared.state, 'active')
+  h.setArchived(SID, false)
+})
+
+test('archive: archiving the ORIGINAL conversation does not touch the share', async (t) => {
+  const h = await shareAndJoin(t)
+  h.setArchived(SRC, true)
+  const state = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
+  assert.equal(state.archived, undefined)
+  assert.equal((await h.guest(`${h.shareId}/say`, { cookie: h.cookie, body: { text: 'hi' } })).status, 200)
+})
+
+test('archive: a pending AI question is withdrawn from the room when archived', async (t) => {
+  const h = await fullAccessShare(t)
+  const { result, ownerReply } = ask(h, [CHOICE_Q])
+  const id = (await pendingQuestions(h)).pending[0].id
+  h.setArchived(SID, true)
+  const r = await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: id, answers: [{ id: 'q1', selected: ['A'] }] } })
+  assert.equal(r.status, 409)
+  ownerReply({ answers: [] })
+  await result
+})
+
+// ---------------------------------------------------------------------------
+// 0.3.0: the shared copy's sidebar title shows the share's state.
+
+const settleTitle = () => new Promise((r) => setTimeout(r, 30))
+
+test('title: shared / paused when archived / ended, and the guest count', async (t) => {
+  const h = await shareAndJoin(t)
+  await settleTitle()
+  assert.equal(h.gw.sessions.get(SID).title, '🔗 Original（分享中・1 位）')
+
+  const share = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared
+  const inv = await h.owner('/api/share-room.invite', { shareId: share.id, guestName: 'E' })
+  const secret = inv.body.invitePath.split('#')[1]
+  await h.guest(`${h.shareId}/join`, { body: { invite: secret } })
+  await settleTitle()
+  assert.equal(h.gw.sessions.get(SID).title, '🔗 Original（分享中・2 位）')
+
+  h.setArchived(SID, true)
+  await settleTitle()
+  assert.equal(h.gw.sessions.get(SID).title, '🔗 Original（已封存・暫停）')
+  h.setArchived(SID, false)
+  await settleTitle()
+  assert.equal(h.gw.sessions.get(SID).title, '🔗 Original（分享中・2 位）')
+
+  await h.owner('/api/share-room.end', { shareId: share.id })
+  await settleTitle()
+  assert.equal(h.gw.sessions.get(SID).title, '🔗 Original（已結束）')
+})
+
+test('title: the original conversation keeps its own name', async (t) => {
+  const h = await shareAndJoin(t)
+  await settleTitle()
+  assert.equal(h.gw.sessions.get(SRC).title, 'Original')
+})
+
+// ---------------------------------------------------------------------------
+// 0.3.0: raising the session's permission from the composer pauses guests and says why.
+
+test('permission raised above the share setting: guests see why they are paused; lowering resumes', async (t) => {
+  const h = await shareAndJoin(t)
+  const stream = await h.guest(`${h.shareId}/events`, { cookie: h.cookie })
+  await readSse(stream, (out) => out.some((f) => f.type === 'reset'), 2000) // tap is following now
+
+  h.gw.sessions.get(SID).permission = 'danger-full-access'
+  h.gw.pushEvent(SID, { type: 'permission/preset', time: Date.now(), data: { preset: 'danger-full-access' } })
+  await new Promise((r) => setTimeout(r, 50))
+  const paused = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
+  assert.equal(paused.permissionPaused, true)
+  assert.equal(paused.aiAllowed, false)
+  assert.equal((await h.guest(`${h.shareId}/say`, { cookie: h.cookie, body: { text: 'q', mode: 'ai' } })).status, 409)
+
+  h.gw.sessions.get(SID).permission = 'read-only'
+  h.gw.pushEvent(SID, { type: 'permission/preset', time: Date.now(), data: { preset: 'read-only' } })
+  await new Promise((r) => setTimeout(r, 50))
+  const back = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
+  assert.equal(back.permissionPaused, undefined)
+  assert.equal(back.aiAllowed, true)
+})
+
+test('permission at or below the share setting does not pause guests', async (t) => {
+  const h = await fullAccessShare(t)
+  const stream = await h.guest(`${h.shareId}/events`, { cookie: h.cookie })
+  await readSse(stream, (out) => out.some((f) => f.type === 'reset'), 2000)
+  h.gw.pushEvent(SID, { type: 'permission/preset', time: Date.now(), data: { preset: 'danger-full-access' } })
+  await new Promise((r) => setTimeout(r, 50))
+  const state = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
+  assert.equal(state.permissionPaused, undefined)
+  assert.equal(state.aiAllowed, true)
 })

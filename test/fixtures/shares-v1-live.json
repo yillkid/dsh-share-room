@@ -1,0 +1,387 @@
+{
+ "version": 1,
+ "shares": [
+  {
+   "id": "sh743a95b958cb25a68187",
+   "sessionId": "session-a9245d07-0000-4000-8000-f8128c32ccb0",
+   "sourceSessionId": "session-2cad6a7c-0000-4000-8000-02a30d0d4dbd",
+   "title": "Project 0",
+   "ownerName": "Owner",
+   "createdAt": 1790846868302,
+   "expiresAt": 1791451668302,
+   "state": "ended",
+   "endedAt": 1790847078945,
+   "endReason": "owner",
+   "readOnlyDays": 30,
+   "readOnlyDeleted": true,
+   "aiAllowed": true,
+   "aiBudget": 50,
+   "aiUsed": 0,
+   "guests": [
+    {
+     "guestId": "b99a6b9eae9d",
+     "name": "Guest0",
+     "joinedAt": 1790847011891,
+     "removedAt": 1790847098570,
+     "cookieHash": "bd26f9c3d4c1123cc5cf7c6130922ebbe612e036c5ad6e9b9cb072ec8169728c",
+     "inviteId": "bb23c9e7cd83",
+     "removedBy": "owner"
+    }
+   ],
+   "invites": [
+    {
+     "id": "bb23c9e7cd83",
+     "inviteHash": "0f3a109949d3defc85b2acc6809917354d04e3fd7a37a6ed486f2d0250589477",
+     "guestName": "Guest0",
+     "createdAt": 1790846868305,
+     "expiresAt": 1791451668302,
+     "usedAt": 1790847011891,
+     "revokedAt": null
+    }
+   ]
+  },
+  {
+   "id": "sha0d750346d1c9404837b",
+   "sessionId": "session-024364a7-0000-4000-8000-a54b5658a2a4",
+   "sourceSessionId": "session-2cad6a7c-0000-4000-8000-02a30d0d4dbd",
+   "title": "Project 1",
+   "ownerName": "Owner",
+   "createdAt": 1790847167274,
+   "expiresAt": 1791451967274,
+   "state": "ended",
+   "endedAt": 1791451967274,
+   "endReason": "expired",
+   "readOnlyDays": 30,
+   "readOnlyDeleted": false,
+   "aiAllowed": true,
+   "aiBudget": 50,
+   "aiUsed": 1,
+   "guests": [
+    {
+     "guestId": "a1d97de1fade",
+     "name": "Guest0",
+     "joinedAt": 1790847183171,
+     "removedAt": null,
+     "cookieHash": "87fe147d0021161356c26e4a34d5adb570c5a17978a7dfc891338a4a715380bd",
+     "inviteId": "fdfe97b1ef97"
+    }
+   ],
+   "invites": [
+    {
+     "id": "fdfe97b1ef97",
+     "inviteHash": "dc0e68f7b913c6dde92bb1498bfe895863776936aa4bae32e20bed6f279a2805",
+     "guestName": "Guest0",
+     "createdAt": 1790847167275,
+     "expiresAt": 1791451967274,
+     "usedAt": 1790847183171,
+     "revokedAt": null
+    }
+   ]
+  },
+  {
+   "id": "sh9af603792c365b236303",
+   "sessionId": "session-c0301040-0000-4000-8000-e74758e3f1cc",
+   "sourceSessionId": "session-f6d222d6-0000-4000-8000-0fbee8477d31",
+   "title": "Project 2",
+   "ownerName": "Owner",
+   "createdAt": 1791731675743,
+   "expiresAt": 1794323675743,
+   "state": "active",
+   "endedAt": null,
+   "endReason": null,
+   "readOnlyDays": 30,
+   "readOnlyDeleted": false,
+   "aiAllowed": true,
+   "aiBudget": 999,
+   "aiUsed": 0,
+   "guests": [
+    {
+     "guestId": "1fe388800368",
+     "name": "Guest0",
+     "joinedAt": 1791731981546,
+     "removedAt": null,
+     "cookieHash": "ff219209cec49839624c9f88ce24b031acc6cd3402a0f4e19dad393c43329803",
+     "inviteId": "2bd771f2c397"
+    }
+   ],
+   "invites": [
+    {
+     "id": "2bd771f2c397",
+     "inviteHash": "7bb9aba4ae9c3ae6bf0219f00a72911d493e7591ab332bce9ca55b7e43ec9b64",
+     "guestName": "Guest0",
+     "createdAt": 1791731675749,
+     "expiresAt": 1794323675743,
+     "usedAt": 1791731981546,
+     "revokedAt": null
+    }
+   ]
+  },
+  {
+   "id": "sh034862b30e963a58fa7d",
+   "sessionId": "session-c4841203-0000-4000-8000-022d3e1cb357",
+   "sourceSessionId": "session-f6d222d6-0000-4000-8000-0fbee8477d31",
+   "title": "Project 3",
+   "ownerName": "Owner",
+   "createdAt": 1791775189720,
+   "expiresAt": 1794367189720,
+   "state": "active",
+   "endedAt": null,
+   "endReason": null,
+   "readOnlyDays": 30,
+   "readOnlyDeleted": false,
+   "aiAllowed": true,
+   "aiBudget": 999,
+   "aiUsed": 2,
+   "guests": [
+    {
+     "guestId": "ad31630001fc",
+     "name": "Guest0",
+     "joinedAt": 1791775604249,
+     "removedAt": null,
+     "cookieHash": "8646f573a797c0b9e3f6e6f70cedaf786f717746d7bb9ee56a89c8c4b6e24766",
+     "inviteId": "56c6debc4943"
+    }
+   ],
+   "invites": [
+    {
+     "id": "56c6debc4943",
+     "inviteHash": "198bf62717e5a7fb13e232c6d2b61f312a084743d0e4afe39cf4996537b858df",
+     "guestName": "Guest0",
+     "createdAt": 1791775189725,
+     "expiresAt": 1794367189720,
+     "usedAt": 1791775604249,
+     "revokedAt": null
+    }
+   ]
+  },
+  {
+   "id": "shc35ad8635a9ef58995a3",
+   "sessionId": "session-bc6c3bd0-0000-4000-8000-f328d824e786",
+   "sourceSessionId": "session-9c93908f-0000-4000-8000-f1a0b43d5d18",
+   "title": "Project 4",
+   "ownerName": "Owner",
+   "createdAt": 1791799227690,
+   "expiresAt": 1794391227690,
+   "state": "active",
+   "endedAt": null,
+   "endReason": null,
+   "readOnlyDays": 30,
+   "readOnlyDeleted": false,
+   "aiAllowed": true,
+   "aiBudget": 9999,
+   "aiUsed": 0,
+   "guests": [
+    {
+     "guestId": "149418bd354d",
+     "name": "Guest0",
+     "joinedAt": 1791952508776,
+     "removedAt": null,
+     "cookieHash": "4816b311595f6540111736a239bafb9cd2301d8e34510b9990996c8960a326f0",
+     "inviteId": "f50d32105ecb"
+    }
+   ],
+   "invites": [
+    {
+     "id": "f50d32105ecb",
+     "inviteHash": "6b2b9c465d493bb5524f20474d58849b12e4dc4d18f5bc4a5743272f9e510938",
+     "guestName": "Guest0",
+     "createdAt": 1791799227699,
+     "expiresAt": 1794391227690,
+     "usedAt": 1791952508776,
+     "revokedAt": null
+    }
+   ]
+  },
+  {
+   "id": "sh7e36fed69022ef05cc94",
+   "sessionId": "session-d4472813-0000-4000-8000-28b772f24f49",
+   "sourceSessionId": "session-1e49e05a-0000-4000-8000-304786d9d34b",
+   "title": "Project 5",
+   "ownerName": "Owner",
+   "createdAt": 1791803737868,
+   "expiresAt": 1799579737868,
+   "state": "active",
+   "endedAt": null,
+   "endReason": null,
+   "readOnlyDays": 30,
+   "readOnlyDeleted": false,
+   "aiAllowed": true,
+   "aiBudget": 9999,
+   "aiUsed": 0,
+   "guests": [
+    {
+     "guestId": "5ed836e36552",
+     "name": "Guest0",
+     "joinedAt": 1791807112437,
+     "removedAt": null,
+     "cookieHash": "ce0b2c88f78c4eaa827b6f9dec6b196d63febc099d284998115c414d0753bd10",
+     "inviteId": "fe14200f6f40"
+    }
+   ],
+   "invites": [
+    {
+     "id": "fe14200f6f40",
+     "inviteHash": "6cd33282531a1d90f3837d3c320ef035716530b4530ddb3745293b81ea163d04",
+     "guestName": "Guest0",
+     "createdAt": 1791803737872,
+     "expiresAt": 1799579737868,
+     "usedAt": 1791807112437,
+     "revokedAt": null
+    }
+   ]
+  },
+  {
+   "id": "shba39213409707ebf1278",
+   "sessionId": "session-6cce04db-0000-4000-8000-07ea62bbc074",
+   "sourceSessionId": "session-08f0fdda-0000-4000-8000-babc56d9e9e3",
+   "title": "Project 6",
+   "ownerName": "Owner",
+   "createdAt": 1791817492313,
+   "expiresAt": 1799593492313,
+   "state": "active",
+   "endedAt": null,
+   "endReason": null,
+   "readOnlyDays": 30,
+   "readOnlyDeleted": false,
+   "aiAllowed": true,
+   "aiBudget": 999,
+   "aiUsed": 15,
+   "guests": [
+    {
+     "guestId": "5cb311a9b54b",
+     "name": "Guest0",
+     "joinedAt": 1791822768446,
+     "removedAt": null,
+     "cookieHash": "e363e1d7e1a73090dc503dce0f85f5a5e780f2a5e2a11d0eae8f9446ffc5f999",
+     "inviteId": "95318c8bef61"
+    }
+   ],
+   "invites": [
+    {
+     "id": "95318c8bef61",
+     "inviteHash": "05ae24bda06440fcc5942c5629a2e0b714673bce7d30ca8e826de1abe6e3da5d",
+     "guestName": "Guest0",
+     "createdAt": 1791817492317,
+     "expiresAt": 1799593492313,
+     "usedAt": 1791822768446,
+     "revokedAt": null
+    }
+   ]
+  },
+  {
+   "id": "sh3ad21fba90ee61deb3e9",
+   "sessionId": "session-328ef3cd-0000-4000-8000-05609606c30c",
+   "sourceSessionId": "session-0ff02a1d-0000-4000-8000-26c8eff1b2a8",
+   "title": "Project 7",
+   "ownerName": "Owner",
+   "createdAt": 1791823684842,
+   "expiresAt": 1799599684842,
+   "state": "active",
+   "endedAt": null,
+   "endReason": null,
+   "readOnlyDays": 30,
+   "readOnlyDeleted": false,
+   "aiAllowed": true,
+   "aiBudget": 999,
+   "aiUsed": 2,
+   "guests": [
+    {
+     "guestId": "e91eaa79538d",
+     "name": "Guest0",
+     "joinedAt": 1791823842068,
+     "removedAt": null,
+     "cookieHash": "6a8b5c83f0548fe9a2b08d04bc16e0eadd324f25199c35f18fb96d95e9df46ab",
+     "inviteId": "1964742e166e"
+    }
+   ],
+   "invites": [
+    {
+     "id": "1964742e166e",
+     "inviteHash": "4c8ad20f03a51908136b7dd97b9ed34afacd0b835a8e834a516dd80a8cd7da82",
+     "guestName": "Guest0",
+     "createdAt": 1791823684844,
+     "expiresAt": 1799599684842,
+     "usedAt": 1791823842068,
+     "revokedAt": null
+    }
+   ]
+  },
+  {
+   "id": "shd59f939cb4e77f026831",
+   "sessionId": "session-ca0fcb46-0000-4000-8000-bb7b4e708503",
+   "sourceSessionId": "session-1e49e05a-0000-4000-8000-304786d9d34b",
+   "title": "Project 8",
+   "ownerName": "Owner",
+   "createdAt": 1791996226869,
+   "expiresAt": 1799772226869,
+   "state": "active",
+   "endedAt": null,
+   "endReason": null,
+   "readOnlyDays": 30,
+   "readOnlyDeleted": false,
+   "aiAllowed": true,
+   "aiBudget": 9999,
+   "aiUsed": 0,
+   "guests": [
+    {
+     "guestId": "ae081df50153",
+     "name": "Guest0",
+     "joinedAt": 1791996253553,
+     "removedAt": null,
+     "cookieHash": "15a9341858bb84fac5629feb85033a6897640b5ebccaac8b6bc0471c401752a4",
+     "inviteId": "2379ea8fef57"
+    }
+   ],
+   "invites": [
+    {
+     "id": "2379ea8fef57",
+     "inviteHash": "dbab64689cc040a5717e3fe2c10c2ee6e666b143e70149da2c6932cdb89ff1a9",
+     "guestName": "Guest0",
+     "createdAt": 1791996226874,
+     "expiresAt": 1799772226869,
+     "usedAt": 1791996253553,
+     "revokedAt": null
+    }
+   ]
+  },
+  {
+   "id": "sh81ccc7eb274351a0d06f",
+   "sessionId": "session-d103f0b0-0000-4000-8000-63273a283557",
+   "sourceSessionId": "session-4e8303d1-0000-4000-8000-de08d9c99a0d",
+   "title": "Project 9",
+   "ownerName": "Owner",
+   "createdAt": 1792374395236,
+   "expiresAt": 1800150395236,
+   "state": "active",
+   "endedAt": null,
+   "endReason": null,
+   "readOnlyDays": 30,
+   "readOnlyDeleted": false,
+   "aiAllowed": true,
+   "aiBudget": 999,
+   "aiUsed": 60,
+   "aiPreset": "read-only",
+   "guests": [
+    {
+     "guestId": "cc58506bb380",
+     "name": "Guest0",
+     "joinedAt": 1792394272251,
+     "removedAt": null,
+     "cookieHash": "166284c853575cfc4651d5a497125074402b5483abf741c128a56c8a5f9df98a",
+     "inviteId": "3c070d73e163"
+    }
+   ],
+   "invites": [
+    {
+     "id": "3c070d73e163",
+     "inviteHash": "69d3c5c6a880f985d3832d7627c3cb2a4fae4f45ecc87403596b35e0fb6c9d44",
+     "guestName": "Guest0",
+     "createdAt": 1792374395244,
+     "expiresAt": 1800150395236,
+     "usedAt": 1792394272251,
+     "revokedAt": null
+    }
+   ]
+  }
+ ]
+}
