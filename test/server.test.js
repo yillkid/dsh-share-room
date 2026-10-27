@@ -32,6 +32,12 @@ function mockGateway() {
         const m = /^\/permission (\S+)$/.exec(args.line)
         if (!s || !m || gw.refusePermission) return { commandId: 'c', result: { kind: 'error', text: 'no' } }
         s.permission = m[1]
+        // Like DSH: the switch appends a permission/preset event, seen by followers
+        // BEFORE the command returns (so before share-room records the new setting).
+        const event = { type: 'permission/preset', seq: s.events.length, time: Date.now(), data: { preset: m[1] } }
+        s.events.push(event)
+        for (const f of followers) if (f.sessionId === args.agentId) f.push({ type: 'event', event })
+        await new Promise((r) => setTimeout(r, 20))
         return { commandId: 'c', result: { kind: 'success', text: `preset ${m[1]}` } }
       }
       const r = args.request ?? args._request
@@ -105,7 +111,8 @@ async function boot({ dir = mkdtempSync(join(tmpdir(), 'share-room-srv-')), conf
     connection: { fetch: { register: (r) => { routes.set(r.path, r); return () => routes.delete(r.path) } } },
     webServer: { register: (r) => { prefix = r; return () => {} } },
     // user-questions/request listeners, so tests can play the Host asking a question
-    on: (name, fn) => { (listeners[name] ??= []).push(fn); return () => {} },
+    // Cordis order: listeners run in registration order unless registered with prepend.
+    on: (name, fn, options) => { const list = (listeners[name] ??= []); if (options?.prepend) fn.__prepend = true; (options?.prepend ? list.unshift(fn) : list.push(fn)); return () => {} },
     workspaceRegistry: { archivedSessionIds: archivedIds },
   }
   plugin.apply(ctx, { dir, ...config })
@@ -558,8 +565,14 @@ function ask(h, questions, { sessionId = SID } = {}) {
   const ownerAnswers = new Promise((r) => { ownerReply = r })
   const controller = new AbortController()
   const agent = { session: { header: { id: sessionId } } }
-  const [listener] = h.listeners['user-questions/request']
-  const result = listener({ questions, agent, signal: controller.signal }, () => ownerAnswers)
+  // Play Cordis: DSH's Web answerer is already registered (it loads first) and, like
+  // the real one, only settles when the owner answers — it never calls next() itself.
+  const webAnswerer = (request, next) => ownerAnswers
+  const list = [...h.listeners['user-questions/request']]
+  // Our listener was registered with prepend → it sits before the Web answerer.
+  const waterfall = [...list.filter((f) => f.__prepend), webAnswerer, ...list.filter((f) => !f.__prepend)]
+  const run = (i, request) => (i < waterfall.length ? waterfall[i](request, () => run(i + 1, request)) : Promise.reject(new Error('NO_PROVIDER')))
+  const result = run(0, { questions, agent, signal: controller.signal })
   return { result, ownerReply, controller }
 }
 
@@ -794,4 +807,26 @@ test('permission at or below the share setting does not pause guests', async (t)
   const state = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
   assert.equal(state.permissionPaused, undefined)
   assert.equal(state.aiAllowed, true)
+})
+
+test('questions: switching the share to full access while the AI waits keeps the question and lets guests answer', async (t) => {
+  const h = await shareAndJoin(t)
+  const stream = await h.guest(`${h.shareId}/events`, { cookie: h.cookie })
+  await readSse(stream, (out) => out.some((f) => f.type === 'reset'), 2000) // the tap follows the session
+  const share = (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body.shared
+  const { result } = ask(h, [CHOICE_Q])
+  assert.equal((await pendingQuestions(h)).canAnswer, false)
+
+  await h.owner('/api/share-room.site', { fullAccess: true })
+  const r = await h.owner('/api/share-room.permission', { shareId: share.id, preset: 'danger-full-access', confirm: true })
+  assert.equal(r.status, 200)
+  const view = await pendingQuestions(h)
+  assert.equal(view.canAnswer, true)
+  assert.equal(view.pending.length, 1, 'the waiting question is not dropped by the owner\'s own switch')
+  const state = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
+  assert.equal(state.permissionPaused, undefined, 'guests are not paused by the owner\'s own switch')
+
+  const a = await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: view.pending[0].id, answers: [{ id: 'q1', selected: ['B'] }] } })
+  assert.equal(a.status, 200)
+  assert.deepEqual(await result, { answers: [{ id: 'q1', selected: ['B'] }] })
 })

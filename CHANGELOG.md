@@ -2,6 +2,12 @@
 
 All notable changes are listed here. Versions follow [Semantic Versioning](https://semver.org/); while the version is `0.x`, minor versions may change behavior.
 
+## 0.3.1 — 2026-10-27
+
+### Fixed
+- **The AI's questions did not reach the room on a real DSH site.** In a Cordis waterfall the first listener owns `next()`; DSH's own Web answerer loads first and settles only when the owner answers, so the share-room listener registered after it never ran. It now registers with `prepend` and calls the owner page as `next()` in parallel, so both see the question and the first answer wins. Found by the end-to-end check on a live site; the server tests now model this listener order and fail without the fix.
+- **Switching a share to full access while the AI waited dropped the question.** DSH emits the new preset before share-room records it as the share's setting; judged in between it looked like the owner had raised the permission above the share, so guests were paused and the waiting question withdrawn. The owner's own switch is now recognised. The test mock emits the preset event the way DSH does.
+
 ## 0.3.0 — 2026-10-27
 
 ### Added
