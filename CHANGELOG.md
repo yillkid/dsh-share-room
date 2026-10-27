@@ -2,6 +2,17 @@
 
 All notable changes are listed here. Versions follow [Semantic Versioning](https://semver.org/); while the version is `0.x`, minor versions may change behavior.
 
+## 0.3.0 — 2026-10-27
+
+### Added
+- **The AI's questions reach the room.** When the AI asks a choice (`ask_user_question`) or presents a plan for review (plan mode), the question is also shown in the shared room. In a **full-access** share, any guest may answer or approve the plan; the first answer wins (the owner's own DSH page included) and the room records who answered. In a **read-only** or **workspace-write** share, guests see the question and that the AI is waiting, but only the owner answers. Nothing here changes what the AI may do: permission approvals stay with the owner.
+- **Archiving the shared conversation pauses the share.** DSH does not run an archived conversation, so guests are now told 「分享者已封存這個對話」 and cannot post or ask until it is unarchived; the share is paused, not ended. Archiving the original (unshared) conversation does not affect the share.
+- **The shared copy's title shows its state** in the sidebar: 「🔗 名稱（分享中・N 位）」, 「（已封存・暫停）」, 「（已結束）」, so it is no longer confused with the original conversation of the same name.
+- **Raising the permission from the composer is explained.** When the shared conversation runs wider than the share's setting, guests see why they cannot ask the AI, and the owner sees a notice of how many guests are paused. A full-access share shows a standing warning to the owner.
+
+### Compatibility
+- `shares.json` stays format 1. Shares created by 0.1.x (no permission recorded) still read as read-only. A compatibility test loads an anonymized live `shares.json` and checks every share keeps its state, guests and AI budget, and that nothing becomes wider.
+
 ## 0.2.0 — 2026-10-05
 
 ### Added

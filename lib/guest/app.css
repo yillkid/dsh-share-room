@@ -52,3 +52,15 @@ footer { border-top: 1px solid var(--line); padding: 8px 14px 12px; }
 .md th, .md td { border: 1px solid var(--line); padding: 3px 8px; word-break: normal; overflow-wrap: normal; text-align: left; vertical-align: top; }
 .md .align-center { text-align: center; }
 .md .align-right { text-align: right; }
+
+/* 0.3.0: questions the AI is waiting on */
+.asks:empty { display: none; }
+.asks { max-height: 45vh; overflow: auto; margin-bottom: 6px; }
+.ask { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.ask-title { font-weight: 600; margin-bottom: 4px; }
+.ask-q { margin-bottom: 6px; }
+.ask-detail { white-space: pre-wrap; word-break: break-word; font: inherit; font-size: 13px; max-height: 30vh; overflow: auto; margin: 0 0 8px; padding: 8px; border-radius: 8px; background: rgba(127,127,127,.08); }
+.ask-opts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.opt { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; background: transparent; color: inherit; cursor: pointer; }
+.opt.on { border-color: currentColor; font-weight: 600; }
+.ask-other { width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
