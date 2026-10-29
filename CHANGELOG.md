@@ -2,6 +2,13 @@
 
 All notable changes are listed here. Versions follow [Semantic Versioning](https://semver.org/); while the version is `0.x`, minor versions may change behavior.
 
+## 0.3.2 — 2026-10-29
+
+### Compatibility
+- **Works on DSH 0.2.1** (tested with 0.2.1-rc.5, Node 24) as well as 0.1.7. DSH 0.2 answers `session/projections` for a conversation written by an older DSH and not yet migrated with `kind: "migration-required"` and no `asOfSeq`, so its history could not be read. share-room now reads the opening snapshot of `session/follow` instead, which activates (and so migrates) the conversation and carries a sequenced baseline; `kind: "sequenced"` and 0.1.7 answers are used as before.
+- New test `test/dsh02-load.test.mjs` (run with `npm run test:dsh02`): loads share-room in the real cordis of DSH 0.2.1-rc.5 and checks it starts, registers its routes, is **first** in the `user-questions/request` waterfall ahead of a listener registered earlier (it fails if `prepend` is dropped), passes an unshared session through, and disposes cleanly. `npm test` stays offline.
+- `shares.json` stays format 1. A copy of a live site booted on DSH 0.2.1-rc.5 kept every share, with no plugin skipped.
+
 ## 0.3.1 — 2026-10-27
 
 ### Fixed
