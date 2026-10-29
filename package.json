@@ -1,6 +1,6 @@
 {
   "name": "dsh-share-room",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Invite others into your DeepSeek Harness (DSH) AI conversation: they join from a link, discuss with you and ask the AI together. No account needed.",
   "type": "module",
   "main": "lib/index.js",
@@ -19,7 +19,8 @@
   },
   "engines": { "node": ">=22" },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "test:dsh02": "D=$(mktemp -d) && npm install --prefix $D --no-save @deepseek-ai/dsh@0.2.1-rc.5 >/dev/null && DSH02_PREFIX=$D node --test test/dsh02-load.test.mjs"
   },
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
