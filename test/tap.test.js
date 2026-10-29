@@ -49,3 +49,27 @@ test('null (no such session) stays null', async () => {
   const gw = gateway(null)
   assert.equal(await projectionsOf(gw, 's1'), null)
 })
+
+// ── DSH 0.2: every in-process gateway call carries the owner Peer ──
+import { withOwnerPeer } from '../lib/index.js'
+
+test('withOwnerPeer: adds the owner Peer (0.2), leaves requests alone without one (0.1.7)', async () => {
+  const seen = []
+  const gateway = { async invoke(r) { seen.push(r); return 'ok' }, async stream(r) { seen.push(r); return 'st' } }
+  const owner = { principal: { kind: 'owner' }, signal: new AbortController().signal }
+  let peer = owner
+  const gw = withOwnerPeer(gateway, () => peer)
+  assert.equal(await gw.invoke({ namespace: 'session', method: 'prompt', args: {} }), 'ok')
+  assert.equal(await gw.stream({ namespace: 'session', method: 'follow', args: {} }), 'st')
+  assert.equal(seen[0].peer, owner)
+  assert.equal(seen[1].peer, owner)
+  // A caller that already names a peer keeps it.
+  const other = { principal: { kind: 'guest' }, signal: new AbortController().signal }
+  await gw.invoke({ namespace: 'session', method: 'page', args: {}, peer: other })
+  assert.equal(seen[2].peer, other)
+  // DSH 0.1.7: no browserPeer, so nothing is added (its gateway defaults to the operator).
+  peer = undefined
+  await gw.invoke({ namespace: 'session', method: 'page', args: {} })
+  assert.equal('peer' in seen[3], false)
+  assert.equal(withOwnerPeer(undefined, () => owner), undefined)
+})
