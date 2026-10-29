@@ -2,6 +2,11 @@
 
 All notable changes are listed here. Versions follow [Semantic Versioning](https://semver.org/); while the version is `0.x`, minor versions may change behavior.
 
+## 0.3.3 — 2026-10-30
+
+### Fixed
+- **On DSH 0.2 the owner's messages never reached a conversation.** DSH 0.2's gateway requires a Peer on every in-process call (0.1.7 used the operator by default); without one, `session/prompt` failed with "Cannot read properties of undefined (reading 'signal')". Every gateway call now carries the owner Peer DSH 0.2 provides (`connection.browserPeer`); on 0.1.7 requests are unchanged. Found by the end-to-end check on a DSH 0.2.1-rc.5 site, which now passes 16/16: entry, share, a guest in a separate browser, read-only guests see but cannot answer AI questions, full access lets the guest answer and the AI continues with it, ending the share stops the guest.
+
 ## 0.3.2 — 2026-10-29
 
 ### Compatibility
