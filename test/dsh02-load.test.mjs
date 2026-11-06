@@ -40,6 +40,8 @@ function host(Context) {
     async stream() { return (async function* () {})() },
   })
   root.provide('workspaceRegistry', { archivedSessionIds: [] })
+  // From @deepseek-ai/dsh-base (dsh-attachment-local) on a real host.
+  root.provide('attachments', { async saveImages() { return [] }, async readImage() { throw new Error('none') } })
   return { root, routes, fetches }
 }
 

@@ -4,6 +4,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { mkdtempSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as plugin from '../lib/index.js'
@@ -18,7 +19,7 @@ const SID2 = 'session-22222222-2222-3333-4444-555555555555'
 const projectionsFor = (s) => ({ asOfSeq: s.events.length - 1, values: { title: s.title, permissions: { currentValue: s.permission ?? 'danger-full-access' }, inbox: { 'next-turn': s.inbox ?? [], 'next-step': [] } } })
 
 function mockGateway() {
-  const sessions = new Map([[SRC, { title: 'Original', events: EVENTS }], [SID, { title: null, events: EVENTS.map((e) => ({ ...e })) }], [SID2, { title: null, events: EVENTS.map((e) => ({ ...e })) }]])
+  const sessions = new Map([[SRC, { title: 'Original', events: EVENTS.map((e) => ({ ...e })) }], [SID, { title: null, events: EVENTS.map((e) => ({ ...e })) }], [SID2, { title: null, events: EVENTS.map((e) => ({ ...e })) }]])
   const followers = new Set()
   const calls = []
   const gw = {
@@ -56,6 +57,12 @@ function mockGateway() {
       if (method === 'rename') { s.title = r.title; return { accepted: true } }
       if (method === 'page') return { records: s.events.map((event) => ({ type: 'event', event })), hasMore: false }
       if (method === 'prompt') {
+        if (r.content.some((p) => p.type === 'image')) {
+          if (gw.noVision) throw Object.assign(new Error('Model "x" does not support image input.'), { code: 'session/attachment-invalid', details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' } })
+          const refs = await gw.attachments.saveImages(r.content.filter((p) => p.type === 'image').map((p) => ({ data: new Uint8Array(Buffer.from(p.data, 'base64')), mediaType: p.mediaType })))
+          let k = 0
+          r.content = r.content.map((p) => p.type === 'image' ? { type: 'image', attachment: refs[k++] } : p)
+        }
         if (s.busy) { (s.inbox ??= []).push({ id: `m-${r.requestId}`, source: { kind: 'user', rpcId: r.requestId }, content: r.content }); return { accepted: true } }
         const seq = s.events.length
         const event = { type: 'user/message', seq, time: Date.now(), data: { content: r.content, source: { kind: 'user', rpcId: 'x' }, role: 'user' } }
@@ -97,6 +104,33 @@ function mockGateway() {
   return gw
 }
 
+// 1x1 PNGs (different colours) for upload tests.
+export const PNG_RED = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='
+export const PNG_BLUE = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg=='
+
+function mockAttachments() {
+  const objects = new Map()
+  const reads = []
+  return {
+    objects, reads,
+    async saveImages(inputs) {
+      return inputs.map(({ data, mediaType }) => {
+        if (!(data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47)) throw Object.assign(new Error('Unsupported or malformed image data.'), { code: 'INVALID_IMAGE' })
+        const id = `sha256:${createHash('sha256').update(data).digest('hex')}`
+        const ref = { attachmentId: id, mediaType: 'image/png', bytes: data.byteLength, width: 1, height: 1 }
+        objects.set(id, Buffer.from(data))
+        return ref
+      })
+    },
+    async readImage(ref) {
+      reads.push(ref.attachmentId)
+      const data = objects.get(ref.attachmentId)
+      if (!data) throw Object.assign(new Error('Attachment object is missing.'), { code: 'ATTACHMENT_NOT_FOUND' })
+      return { ref, data: new Uint8Array(data) }
+    },
+  }
+}
+
 async function boot({ dir = mkdtempSync(join(tmpdir(), 'share-room-srv-')), config = {} } = {}) {
   const routes = new Map()
   let prefix
@@ -104,7 +138,9 @@ async function boot({ dir = mkdtempSync(join(tmpdir(), 'share-room-srv-')), conf
   const listeners = {}
   const archivedIds = []
   const gw = mockGateway()
+  const attachments = mockAttachments()
   const ctx = {
+    attachments,
     logger: () => ({ warn() {}, error(...a) { console.error(...a) }, info() {} }),
     typertGateway: gw,
     effect: (fn) => { const d = fn(); if (typeof d === 'function') disposers.push(d) },
@@ -115,6 +151,7 @@ async function boot({ dir = mkdtempSync(join(tmpdir(), 'share-room-srv-')), conf
     on: (name, fn, options) => { const list = (listeners[name] ??= []); if (options?.prepend) fn.__prepend = true; (options?.prepend ? list.unshift(fn) : list.push(fn)); return () => {} },
     workspaceRegistry: { archivedSessionIds: archivedIds },
   }
+  gw.attachments = attachments
   plugin.apply(ctx, { dir, ...config })
   const server = createServer((req, res) => {
     if (req.url.startsWith('/share/') || req.url === '/share') return prefix.handler(req, res)
@@ -139,7 +176,7 @@ async function boot({ dir = mkdtempSync(join(tmpdir(), 'share-room-srv-')), conf
     if (!on && at >= 0) archivedIds.splice(at, 1)
     for (const fn of listeners['domain/changed'] ?? []) fn({ domain: 'workspace', table: '', operation: 'put' })
   }
-  return { base, dir, gw, routes, owner, guest, listeners, setArchived, close: () => { for (const d of disposers) d(); server.closeAllConnections(); server.close() } }
+  return { base, dir, gw, attachments, routes, owner, guest, listeners, setArchived, close: () => { for (const d of disposers) d(); server.closeAllConnections(); server.close() } }
 }
 
 async function readSse(res, until, timeoutMs = 3000) {
@@ -829,4 +866,162 @@ test('questions: switching the share to full access while the AI waits keeps the
   const a = await h.guest(`${h.shareId}/answer`, { cookie: h.cookie, body: { questionId: view.pending[0].id, answers: [{ id: 'q1', selected: ['B'] }] } })
   assert.equal(a.status, 200)
   assert.deepEqual(await result, { answers: [{ id: 'q1', selected: ['B'] }] })
+})
+
+// --- images (0.4.0) -------------------------------------------------------------
+
+const say = (h, body) => h.guest(`${h.shareId}/say`, { body, cookie: h.cookie })
+const ownerState = async (h) => (await h.owner(`/api/share-room.state?sessionId=${SID}`)).body
+const lastPrompt = (h) => h.gw.calls.filter((c) => c.method === 'prompt').at(-1)?.request
+
+test('guest 💬 with an image: stored by DSH, shown to everyone, readable only through this share', async (t) => {
+  const h = await shareAndJoin(t)
+  const res = await say(h, { text: '看這張', mode: 'discuss', images: [{ mediaType: 'image/png', data: PNG_RED }] })
+  assert.equal(res.status, 200, await res.clone().text())
+  const { message } = await res.json()
+  assert.equal(message.images.length, 1)
+  assert.deepEqual(Object.keys(message.images[0]).sort(), ['height', 'id', 'width'], 'no storage details leak')
+  const id = message.images[0].id
+  // The guest can fetch it; the response is a locked-down image.
+  const img = await h.guest(`${h.shareId}/image/${id}`, { cookie: h.cookie })
+  assert.equal(img.status, 200)
+  assert.equal(img.headers.get('content-type'), 'image/png')
+  assert.equal(img.headers.get('x-content-type-options'), 'nosniff')
+  assert.match(img.headers.get('content-security-policy'), /sandbox/)
+  assert.ok(Buffer.from(await img.arrayBuffer()).equals(Buffer.from(PNG_RED, 'base64')))
+  // Without the guest cookie: nothing.
+  assert.equal((await h.guest(`${h.shareId}/image/${id}`)).status, 401)
+  // The owner sees it in the discussion and through the owner route.
+  const st = await ownerState(h)
+  assert.equal(st.discussion.messages.at(-1).images[0].id, id)
+  const ownerImg = await h.owner(`/api/share-room.image?sessionId=${SID}&id=${id}`)
+  assert.equal(ownerImg.status, 200)
+  assert.equal(st.shared.guestImagesUsed, 1)
+  // Image-only messages are fine; junk is not.
+  assert.equal((await say(h, { text: '', mode: 'discuss', images: [{ mediaType: 'image/png', data: PNG_BLUE }] })).status, 200)
+  for (const images of [[{ mediaType: 'image/svg+xml', data: PNG_RED }], [{ mediaType: 'image/png', data: 'not base64!' }], [{ mediaType: 'image/png', data: Buffer.from('<svg/>').toString('base64') }], Array(5).fill({ mediaType: 'image/png', data: PNG_RED })]) {
+    const bad = await say(h, { text: 'x', mode: 'discuss', images })
+    assert.ok([400, 409].includes(bad.status), `${bad.status} ${JSON.stringify(images).slice(0, 60)}`)
+  }
+  assert.equal((await ownerState(h)).shared.guestImagesUsed, 2, 'refused uploads are refunded')
+})
+
+test('a guest cannot read images outside this share: other sessions, other shares, or guessed ids', async (t) => {
+  const h = await shareAndJoin(t)
+  // An image that exists in the attachment store but belongs to another session.
+  const [secret] = await h.attachments.saveImages([{ data: new Uint8Array(Buffer.from(PNG_BLUE, 'base64')), mediaType: 'image/png' }])
+  const key = secret.attachmentId.slice(7)
+  h.gw.sessions.get(SRC).events.push({ type: 'user/message', seq: 999, time: Date.now(), data: { source: { kind: 'user' }, content: [{ type: 'image', attachment: secret }] } })
+  assert.equal((await h.guest(`${h.shareId}/image/${key}`, { cookie: h.cookie })).status, 404)
+  for (const bad of ['..%2F..%2Fetc', 'ZZ', `${key}x`, key.toUpperCase()]) assert.equal((await h.guest(`${h.shareId}/image/${bad}`, { cookie: h.cookie })).status, 404, bad)
+  // The owner route only serves discussion images of a shared session.
+  assert.equal((await h.owner(`/api/share-room.image?sessionId=${SRC}&id=${key}`)).status, 404)
+  assert.equal((await h.owner(`/api/share-room.image?sessionId=${SID}&id=${key}`)).status, 404)
+})
+
+test('owner images in the shared session become visible to guests (only person-typed messages)', async (t) => {
+  const h = await shareAndJoin(t)
+  // The owner asks with an image in the shared session (as the GUI would).
+  const prompt = await h.owner('/api/session/prompt', { type: 'client-request', rpcId: 'r1', method: 'session/prompt', payload: { args: { request: { requestId: 'q1', sessionId: SID, mode: 'queue', content: [{ type: 'image', mediaType: 'image/png', data: PNG_RED }, { type: 'text', text: '這是什麼？' }] } } } })
+  assert.equal(prompt.body.result.ok, true, JSON.stringify(prompt.body))
+  const r = await h.guest(`${h.shareId}/events`, { cookie: h.cookie })
+  const frames = await readSse(r, (out) => out.some((f) => (f.type === 'reset' || f.type === 'items') && f.items.some((i) => i.kind === 'ask' && i.images?.length)))
+  const ask = frames.flatMap((f) => f.items ?? []).filter((i) => i.kind === 'ask' && i.images?.length).at(-1)
+  assert.ok(ask, 'the ask carries its image')
+  assert.equal(ask.text, '這是什麼？', 'no [圖片] placeholder any more')
+  const img = await h.guest(`${h.shareId}/image/${ask.images[0].id}`, { cookie: h.cookie })
+  assert.equal(img.status, 200)
+  // An image inside a tool result (not person-typed) is never servable.
+  const [toolImg] = await h.attachments.saveImages([{ data: new Uint8Array(Buffer.from(PNG_BLUE, 'base64')), mediaType: 'image/png' }])
+  assert.notEqual(toolImg.attachmentId, `sha256:${ask.images[0].id}`)
+  h.gw.sessions.get(SID).events.push({ type: 'tool/result', seq: 5000, time: Date.now(), data: { message: { content: [{ type: 'image', attachment: toolImg }] } } })
+  assert.equal((await h.guest(`${h.shareId}/image/${toolImg.attachmentId.slice(7)}`, { cookie: h.cookie })).status, 404)
+})
+
+test('🤖 with an image: the AI gets the image; discussion images ride along with the next question', async (t) => {
+  const h = await shareAndJoin(t)
+  assert.equal((await say(h, { text: '我畫的', mode: 'discuss', images: [{ mediaType: 'image/png', data: PNG_BLUE }] })).status, 200)
+  const res = await say(h, { text: '這兩張哪張好？', mode: 'ai', images: [{ mediaType: 'image/png', data: PNG_RED }] })
+  assert.equal(res.status, 200, await res.clone().text())
+  const sent = lastPrompt(h).content
+  const images = sent.filter((p) => p.type === 'image')
+  assert.equal(images.length, 2, 'own image, then the discussion image')
+  const digest = (p) => p.attachment.attachmentId
+  const sha = (b64) => `sha256:${createHash('sha256').update(Buffer.from(b64, 'base64')).digest('hex')}`
+  assert.equal(digest(images[0]), sha(PNG_RED))
+  assert.equal(digest(images[1]), sha(PNG_BLUE))
+  assert.match(sent.at(-1).text, /"images":1/, 'the discussion block says which message had an image')
+  // Once bundled, the discussion image is not sent again.
+  assert.equal((await say(h, { text: '再問一次', mode: 'ai' })).status, 200)
+  assert.equal(lastPrompt(h).content.filter((p) => p.type === 'image').length, 0)
+})
+
+test('a model without vision: own images are refused with a clear message; discussion images are dropped', async (t) => {
+  const h = await shareAndJoin(t)
+  h.gw.noVision = true
+  const own = await say(h, { text: '看圖', mode: 'ai', images: [{ mediaType: 'image/png', data: PNG_RED }] })
+  assert.equal(own.status, 409)
+  assert.match((await own.json()).message, /看不懂圖片/)
+  const st = await ownerState(h)
+  assert.equal(st.shared.aiUsed, 0, 'question refunded')
+  assert.equal(st.shared.guestImagesUsed, 0, 'image refunded')
+  assert.equal((await say(h, { text: '討論圖', mode: 'discuss', images: [{ mediaType: 'image/png', data: PNG_BLUE }] })).status, 200)
+  const ask = await say(h, { text: '純文字問題', mode: 'ai' })
+  assert.equal(ask.status, 200, await ask.clone().text())
+  assert.equal(lastPrompt(h).content.filter((p) => p.type === 'image').length, 0)
+})
+
+test('owner controls guest images: switch and budget; owner 💬 can carry images', async (t) => {
+  const h = await shareAndJoin(t)
+  const share = (await ownerState(h)).shared
+  assert.equal(share.guestImages, true)
+  assert.equal(share.guestImageBudget, 30)
+  await h.owner('/api/share-room.settings', { shareId: share.id, guestImages: false })
+  const st = await (await h.guest(`${h.shareId}/state`, { cookie: h.cookie })).json()
+  assert.equal(st.imagesAllowed, false)
+  assert.equal((await say(h, { text: 'x', mode: 'discuss', images: [{ mediaType: 'image/png', data: PNG_RED }] })).status, 409)
+  await h.owner('/api/share-room.settings', { shareId: share.id, guestImages: true, guestImageBudget: 1 })
+  assert.equal((await say(h, { text: 'x', mode: 'discuss', images: [{ mediaType: 'image/png', data: PNG_RED }] })).status, 200)
+  const over = await say(h, { text: 'y', mode: 'discuss', images: [{ mediaType: 'image/png', data: PNG_BLUE }] })
+  assert.equal(over.status, 409)
+  assert.match((await over.json()).message, /上限/)
+  assert.equal((await h.owner('/api/share-room.settings', { shareId: share.id, guestImageBudget: 0 })).status, 400, 'not below what was used')
+  // The owner's own 💬 may carry images and is not counted against guests.
+  const mine = await h.owner('/api/share-room.discuss', { sessionId: SID, text: '', images: [{ mediaType: 'image/png', data: PNG_BLUE }] })
+  assert.equal(mine.status, 200, JSON.stringify(mine.body))
+  assert.equal(mine.body.message.images.length, 1)
+  assert.equal((await ownerState(h)).shared.guestImagesUsed, 1)
+  const seen = await h.guest(`${h.shareId}/image/${mine.body.message.images[0].id}`, { cookie: h.cookie })
+  assert.equal(seen.status, 200)
+})
+
+test('ended share: images stay readable on the read-only page; deleted page: gone', async (t) => {
+  const h = await shareAndJoin(t)
+  const { message } = await (await say(h, { text: 'x', mode: 'discuss', images: [{ mediaType: 'image/png', data: PNG_RED }] })).json()
+  const share = (await ownerState(h)).shared
+  await h.owner('/api/share-room.end', { shareId: share.id })
+  assert.equal((await h.guest(`${h.shareId}/image/${message.images[0].id}`, { cookie: h.cookie })).status, 200)
+  assert.equal((await say(h, { text: 'y', mode: 'discuss', images: [{ mediaType: 'image/png', data: PNG_BLUE }] })).status, 409, 'no uploads after the end')
+  await h.owner('/api/share-room.delete', { shareId: share.id })
+  assert.notEqual((await h.guest(`${h.shareId}/image/${message.images[0].id}`, { cookie: h.cookie })).status, 200)
+})
+
+test('upload size is bounded before anything is parsed', async (t) => {
+  const h = await shareAndJoin(t)
+  const huge = 'A'.repeat(17 * 1024 * 1024)
+  const res = await say(h, { text: 'x', mode: 'discuss', images: [{ mediaType: 'image/png', data: huge }] }).catch((e) => ({ status: 'reset', e }))
+  assert.ok(res.status === 413 || res.status === 'reset', String(res.status))
+  assert.equal(h.attachments.objects.size, 0)
+})
+
+test("an image the owner posts after the share ended never reaches the read-only page", async (t) => {
+  const h = await shareAndJoin(t)
+  const share = (await ownerState(h)).shared
+  await h.owner("/api/share-room.end", { shareId: share.id })
+  await new Promise((r) => setTimeout(r, 20))
+  // The owner keeps using the session privately, with an image.
+  const [later] = await h.attachments.saveImages([{ data: new Uint8Array(Buffer.from(PNG_BLUE, "base64")), mediaType: "image/png" }])
+  h.gw.sessions.get(SID).events.push({ type: "user/message", seq: 9000, time: Date.now() + 1000, data: { source: { kind: "user" }, content: [{ type: "image", attachment: later }, { type: "text", text: "private" }] } })
+  const res = await h.guest(`${h.shareId}/image/${later.attachmentId.slice(7)}`, { cookie: h.cookie })
+  assert.equal(res.status, 404)
 })
