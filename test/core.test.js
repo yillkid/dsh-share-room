@@ -1,10 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import {
-  cleanName, cleanText, guestItems, hashSecret, newSecret, parseCookies, parseTagged, secretMatches,
-  splitTagged, tagContent, transcriptMarkdown, validSecret, validSessionId, validShareId, toolLabel, neutralize,
-} from '../lib/core.js'
+import { cleanName, cleanText, guestItems, hashSecret, newSecret, parseCookies, parseTagged, secretMatches, splitTagged, tagContent, transcriptMarkdown, validSecret, validSessionId, validShareId, toolLabel, neutralize, cleanImageRef, discussionBlock } from '../lib/core.js'
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/events.json', import.meta.url), 'utf8'))
 const events = fixture.frames.flatMap((f) => f.type === 'snapshot' ? f.records.map((r) => r.event) : f.type === 'event' ? [f.event] : [])
@@ -151,4 +148,28 @@ test('transcript: names and text cannot forge headings, links, images or HTML', 
   }
   assert.match(md, /^    !\[p\]\(https:\/\/evil\/p\.png\) <img/m)
   assert.equal(md.split('\n').filter((l) => l.startsWith('**🤖')).length, 0)
+})
+
+test('images: only clean stored refs from person-typed messages reach guest items', () => {
+  const ref = { attachmentId: `sha256:${'a'.repeat(64)}`, mediaType: 'image/png', bytes: 70, width: 10, height: 20, name: 'secret-name.png', originalDimensions: { width: 1, height: 1 } }
+  assert.deepEqual(cleanImageRef(ref), { attachmentId: ref.attachmentId, mediaType: 'image/png', bytes: 70, width: 10, height: 20 })
+  for (const bad of [null, {}, { ...ref, attachmentId: 'sha256:xyz' }, { ...ref, attachmentId: `md5:${'a'.repeat(64)}` }, { ...ref, mediaType: 'image/svg+xml' }, { ...ref, width: 0 }, { ...ref, bytes: -1 }, { ...ref, height: 1.5 }]) {
+    assert.equal(cleanImageRef(bad), undefined, JSON.stringify(bad))
+  }
+  const user = { type: 'user/message', seq: 1, time: 1, data: { source: { kind: 'user' }, content: [{ type: 'image', attachment: ref }, { type: 'text', text: 'hi' }] } }
+  const [item] = guestItems(user, { name: 'C' })
+  assert.deepEqual(item.images, [{ id: 'a'.repeat(64), width: 10, height: 20 }], 'id and size only: no name, no type, no bytes')
+  assert.equal(item.text, 'hi')
+  // Synthesized user-role messages, tool results and assistant output never expose images.
+  for (const event of [
+    { ...user, data: { ...user.data, source: { kind: 'subagent' } } },
+    { type: 'tool/result', seq: 2, data: { message: { content: [{ type: 'image', attachment: ref }] } } },
+    { type: 'assistant/message', seq: 3, data: { message: { role: 'assistant', source: { kind: 'model' }, content: [{ type: 'image', attachment: ref }] } } },
+  ]) assert.ok(guestItems(event, { name: 'C' }).every((i) => !i.images?.length), event.type)
+})
+
+test('discussion block tells the AI which messages carried images', () => {
+  const block = discussionBlock([{ name: 'D', id: 'guest:x', at: 't', text: '', images: [{}, {}] }, { name: 'C', id: 'owner', at: 't', text: 'ok' }])
+  assert.match(block, /"images":2/)
+  assert.equal((block.match(/"images"/g) ?? []).length, 1)
 })

@@ -2,6 +2,21 @@
 
 All notable changes are listed here. Versions follow [Semantic Versioning](https://semver.org/); while the version is `0.x`, minor versions may change behavior.
 
+## 0.4.0 — 2026-11-06
+
+### Added
+- **Images in a share.** Images people attach in the shared conversation are now shown on the guest page (tap to enlarge) instead of 「[圖片]」.
+- **Guests can attach images** to 💬 discussion or 🤖 questions, up to 4 per message. The page downsizes them to 2048 px and re-encodes them, which drops metadata such as GPS. DSH's attachment store then validates and normalizes each one, so only real PNG, JPEG, WebP or GIF images are accepted.
+- **The owner's 💬 discussion can carry images** too (the composer's image attachments).
+- **The AI sees discussion images.** A 🤖 question carries the asker's images plus the images posted to the discussion since the last question (newest 8). If the model can't read images, a question with its own images is refused with a clear message, and discussion images are left out.
+- **Owner controls.** The manage dialog adds 「允許訪客傳圖片」 and an image limit (30 by default, up to 200, not below what was already sent).
+
+### Security
+- Guests can only fetch images that are part of the share: images in person-typed messages of the shared conversation as they see it (frozen at the end of a share), and images posted to its discussion. Images are fetched by their content hash, and anything else in the attachment store returns 404.
+- Image responses carry the stored media type, `nosniff`, a `sandbox` CSP and `Cross-Origin-Resource-Policy: same-origin`.
+- Uploads are capped at 16 MB per request and 8 MB per image, rate-limited per guest, charged against the image limit, and refunded if refused.
+- The plugin now injects DSH's `attachments` service (part of `@deepseek-ai/dsh-base`).
+
 ## 0.3.3 — 2026-10-30
 
 ### Fixed

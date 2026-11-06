@@ -73,3 +73,17 @@ test('withOwnerPeer: adds the owner Peer (0.2), leaves requests alone without on
   assert.equal('peer' in seen[3], false)
   assert.equal(withOwnerPeer(undefined, () => owner), undefined)
 })
+
+test("tap remembers images only from messages a person typed", async () => {
+  const { SessionTap } = await import("../lib/tap.js")
+  const tap = new SessionTap({ gw: {}, sessionId: "s", owner: () => ({ name: "C" }) })
+  const ref = (c) => ({ attachmentId: `sha256:${c.repeat(64)}`, mediaType: "image/png", bytes: 70, width: 1, height: 1 })
+  tap.push([
+    { type: "user/message", seq: 1, time: 1, data: { source: { kind: "user" }, content: [{ type: "image", attachment: ref("a") }] } },
+    { type: "user/message", seq: 2, time: 2, data: { source: { kind: "subagent" }, content: [{ type: "image", attachment: ref("b") }] } },
+    { type: "tool/result", seq: 3, time: 3, data: { message: { content: [{ type: "image", attachment: ref("c") }] } } },
+    { type: "assistant/message", seq: 4, time: 4, data: { message: { role: "assistant", source: { kind: "model" }, content: [{ type: "image", attachment: ref("d") }] } } },
+  ])
+  assert.equal(tap.imageRef("a".repeat(64))?.attachmentId, `sha256:${"a".repeat(64)}`)
+  for (const c of ["b", "c", "d"]) assert.equal(tap.imageRef(c.repeat(64)), undefined, c)
+})

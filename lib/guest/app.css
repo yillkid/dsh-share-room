@@ -64,3 +64,16 @@ footer { border-top: 1px solid var(--line); padding: 8px 14px 12px; }
 .opt { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; background: transparent; color: inherit; cursor: pointer; }
 .opt.on { border-color: currentColor; font-weight: 600; }
 .ask-other { width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
+
+/* Images */
+.images { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.images img { max-width: 220px; max-height: 220px; width: auto; height: auto; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; object-fit: contain; background: rgba(127,127,127,.08); }
+.viewer { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; z-index: 10; cursor: zoom-out; }
+.viewer img { max-width: 96vw; max-height: 96vh; object-fit: contain; }
+.previews { display: flex; flex-wrap: wrap; gap: 6px; }
+.previews:empty { display: none; }
+.preview { position: relative; }
+.preview img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+.preview .remove { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; border: 0; background: #333; color: #fff; font-size: 13px; line-height: 20px; padding: 0; cursor: pointer; }
+.attach { font-size: 18px; background: transparent; border: 1px solid var(--line); border-radius: 8px; height: 36px; width: 40px; cursor: pointer; color: inherit; }
+.attach[hidden] { display: none; }
